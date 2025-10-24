@@ -1,13 +1,10 @@
 use clap::{Parser, Subcommand};
-use rs_cli_tmpl::commands;
-use rs_cli_tmpl::error::AppError;
+use fusion::cli;
+use fusion::error::AppError;
 
 #[derive(Parser)]
-#[command(name = "rs-cli-tmpl")]
-#[command(
-    about = "Reference architecture for building Rust CLI tools",
-    long_about = None
-)]
+#[command(name = "fusion")]
+#[command(about = "Fusion CLI for managing local LLM runtimes", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -15,37 +12,41 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Add a new item to the template storage backend
-    #[clap(alias = "a")]
-    Add {
-        /// Identifier for the item
-        id: String,
-        /// Content to persist with the item
-        #[clap(short, long)]
-        content: String,
+    /// Manage local LLM runtimes
+    #[command(subcommand)]
+    Llm(LlmCommands),
+}
+
+#[derive(Subcommand)]
+enum LlmCommands {
+    /// Start the configured LLM runtimes
+    Up,
+    /// Stop the configured LLM runtimes
+    Down {
+        /// Force-stop services using SIGKILL
+        #[arg(short, long, default_value_t = false)]
+        force: bool,
     },
-    /// List all stored item identifiers
-    #[clap(alias = "ls")]
-    List,
-    /// Delete an item from storage
-    #[clap(alias = "rm")]
-    Delete {
-        /// Identifier for the item to delete
-        id: String,
-    },
+    /// Display runtime status information
+    Ps,
+    /// Show log file locations for managed runtimes
+    Logs,
 }
 
 fn main() {
     let cli = Cli::parse();
 
     let result: Result<(), AppError> = match cli.command {
-        Commands::Add { id, content } => commands::add(&id, &content),
-        Commands::List => commands::list().map(|_| ()),
-        Commands::Delete { id } => commands::delete(&id),
+        Commands::Llm(subcommand) => match subcommand {
+            LlmCommands::Up => cli::handle_up(),
+            LlmCommands::Down { force } => cli::handle_down(force),
+            LlmCommands::Ps => cli::handle_ps(),
+            LlmCommands::Logs => cli::handle_logs(),
+        },
     };
 
-    if let Err(e) = result {
-        eprintln!("Error: {}", e);
+    if let Err(err) = result {
+        eprintln!("Error: {err}");
         std::process::exit(1);
     }
 }

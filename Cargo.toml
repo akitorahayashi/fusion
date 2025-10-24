@@ -1,10 +1,12 @@
 [package]
-name = "rs-cli-tmpl"
+name = "fusion"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
+dotenvy = "0.15"
+sysinfo = { version = "0.30", default-features = true }
 
 [dev-dependencies]
 assert_cmd = "2.0"
