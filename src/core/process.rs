@@ -6,8 +6,8 @@ use std::io::{self, Write};
 use std::mem;
 use std::path::Path;
 use std::process::{Command, Stdio};
-use std::sync::{LazyLock, RwLock};
-use sysinfo::{Signal, System};
+use std::sync::{LazyLock, Mutex, RwLock};
+use sysinfo::{Pid, Signal, System};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StartOutcome {
@@ -30,15 +30,44 @@ pub enum StatusOutcome {
 
 pub trait ProcessDriver: Send + Sync {
     fn spawn(&self, service: &ManagedService, log_path: &Path) -> Result<i32, AppError>;
-    fn is_running(&self, pid: i32) -> bool;
+    fn is_running(&self, service: &ManagedService, pid: i32) -> bool;
     fn signal(&self, service: &ManagedService, pid: i32, force: bool) -> Result<bool, AppError>;
     fn kill_by_signature(&self, service: &ManagedService, force: bool) -> Result<usize, AppError>;
 }
 
-struct SystemProcessDriver;
+struct SystemProcessDriver {
+    system: Mutex<System>,
+}
+
+impl SystemProcessDriver {
+    fn new() -> Self {
+        Self { system: Mutex::new(System::new_all()) }
+    }
+
+    fn with_system<R>(&self, f: impl FnOnce(&mut System) -> R) -> R {
+        let mut system = self.system.lock().expect("System lock poisoned");
+        f(&mut system)
+    }
+
+    fn expected_signature(service: &ManagedService) -> String {
+        service.command.join(" ")
+    }
+
+    fn process_signature(process: &sysinfo::Process) -> String {
+        if process.cmd().is_empty() { process.name().to_string() } else { process.cmd().join(" ") }
+    }
+
+    fn matches_signature(expected: &str, process: &sysinfo::Process) -> bool {
+        Self::process_signature(process).starts_with(expected)
+    }
+
+    fn refresh_processes(system: &mut System) {
+        system.refresh_processes();
+    }
+}
 
 static DRIVER: LazyLock<RwLock<Box<dyn ProcessDriver>>> =
-    LazyLock::new(|| RwLock::new(Box::new(SystemProcessDriver)));
+    LazyLock::new(|| RwLock::new(Box::new(SystemProcessDriver::new())));
 
 fn with_driver<R>(f: impl FnOnce(&dyn ProcessDriver) -> R) -> R {
     let guard = DRIVER.read().expect("process driver lock poisoned");
@@ -71,58 +100,50 @@ impl ProcessDriver for SystemProcessDriver {
         Ok(child.id() as i32)
     }
 
-    fn is_running(&self, pid: i32) -> bool {
-        let mut system = System::new_all();
-        system.refresh_processes();
-        system.process(sysinfo::Pid::from_u32(pid as u32)).is_some()
+    fn is_running(&self, service: &ManagedService, pid: i32) -> bool {
+        let expected = Self::expected_signature(service);
+        self.with_system(|system| {
+            Self::refresh_processes(system);
+            let sys_pid = Pid::from_u32(pid as u32);
+            system
+                .process(sys_pid)
+                .map(|process| Self::matches_signature(&expected, process))
+                .unwrap_or(false)
+        })
     }
 
-    fn signal(&self, _service: &ManagedService, pid: i32, force: bool) -> Result<bool, AppError> {
-        let mut system = System::new_all();
-        system.refresh_processes();
-        let sys_pid = sysinfo::Pid::from_u32(pid as u32);
-        if let Some(process) = system.process(sys_pid) {
-            let signal = if force { Signal::Kill } else { Signal::Term };
-            let result = process
-                .kill_with(signal)
-                .or_else(|| if force { Some(process.kill()) } else { None })
-                .unwrap_or(false);
-            Ok(result)
-        } else {
-            Ok(false)
-        }
+    fn signal(&self, service: &ManagedService, pid: i32, force: bool) -> Result<bool, AppError> {
+        let expected = Self::expected_signature(service);
+        self.with_system(|system| {
+            Self::refresh_processes(system);
+            let sys_pid = Pid::from_u32(pid as u32);
+            if let Some(process) = system.process(sys_pid) {
+                if !Self::matches_signature(&expected, process) {
+                    return Ok(false);
+                }
+                let signal = if force { Signal::Kill } else { Signal::Term };
+                Ok(process.kill_with(signal).unwrap_or(false))
+            } else {
+                Ok(false)
+            }
+        })
     }
 
     fn kill_by_signature(&self, service: &ManagedService, force: bool) -> Result<usize, AppError> {
-        let signature = service.command.join(" ");
-        let mut system = System::new_all();
-        system.refresh_processes();
-        let signal = if force { Signal::Kill } else { Signal::Term };
-
-        let mut killed = 0;
-        for process in system.processes().values() {
-            let command_line = if process.cmd().is_empty() {
-                process.name().to_string()
-            } else {
-                process.cmd().join(" ")
-            };
-
-            if command_line.starts_with(&signature) {
-                let result = process
-                    .kill_with(signal)
-                    .or_else(|| if force { Some(process.kill()) } else { None })
-                    .unwrap_or(false);
-                if result {
+        let expected = Self::expected_signature(service);
+        self.with_system(|system| {
+            Self::refresh_processes(system);
+            let signal = if force { Signal::Kill } else { Signal::Term };
+            let mut killed = 0;
+            for process in system.processes().values() {
+                if Self::matches_signature(&expected, process)
+                    && process.kill_with(signal).unwrap_or(false)
+                {
                     killed += 1;
                 }
             }
-        }
-
-        if killed > 0 {
-            remove_pid(service)?;
-        }
-
-        Ok(killed)
+            Ok(killed)
+        })
     }
 }
 
@@ -130,7 +151,7 @@ pub fn start_service(service: &ManagedService) -> Result<StartOutcome, AppError>
     ensure_pid_dir()?;
 
     if let Some(pid) = read_pid(service)? {
-        if with_driver(|driver| driver.is_running(pid)) {
+        if with_driver(|driver| driver.is_running(service, pid)) {
             return Ok(StartOutcome::AlreadyRunning { pid });
         }
         remove_pid(service)?;
@@ -151,18 +172,16 @@ pub fn start_service(service: &ManagedService) -> Result<StartOutcome, AppError>
 
 pub fn stop_service(service: &ManagedService, force: bool) -> Result<StopOutcome, AppError> {
     if let Some(pid) = read_pid(service)? {
-        if with_driver(|driver| driver.is_running(pid)) {
-            if with_driver(|driver| driver.signal(service, pid, force))? {
+        if with_driver(|driver| driver.is_running(service, pid)) {
+            let signaled = with_driver(|driver| driver.signal(service, pid, force))?;
+            if signaled {
                 remove_pid(service)?;
                 return Ok(StopOutcome::Stopped { pid, forced: force });
             }
-            return Err(AppError::process_error(
-                service.name,
-                format!("failed to send signal to pid {pid}"),
-            ));
+            remove_pid(service)?;
+        } else {
+            remove_pid(service)?;
         }
-
-        remove_pid(service)?;
     }
 
     let killed = with_driver(|driver| driver.kill_by_signature(service, force))?;
@@ -175,7 +194,7 @@ pub fn stop_service(service: &ManagedService, force: bool) -> Result<StopOutcome
 
 pub fn status_service(service: &ManagedService) -> Result<StatusOutcome, AppError> {
     if let Some(pid) = read_pid(service)? {
-        if with_driver(|driver| driver.is_running(pid)) {
+        if with_driver(|driver| driver.is_running(service, pid)) {
             return Ok(StatusOutcome::Running { pid });
         }
         remove_pid(service)?;
@@ -282,7 +301,6 @@ mod tests {
         write_pid(&svc, 999).unwrap();
         remove_pid(&svc).expect("pid file should be removed");
         assert!(!svc.pid_path().exists());
-        // Removing again should not error.
         remove_pid(&svc).expect("second removal should succeed");
     }
 

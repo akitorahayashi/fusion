@@ -6,14 +6,13 @@ use fusion::core::process::{DriverGuard, ProcessDriver, install_driver};
 use fusion::core::services::ManagedService;
 use fusion::error::AppError;
 use serial_test::serial;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 struct DriverState {
     next_pid: i32,
     running: HashSet<String>,
     events: Vec<String>,
-    pid_map: HashMap<i32, String>,
 }
 
 #[derive(Clone)]
@@ -28,7 +27,6 @@ impl MockDriver {
                 next_pid: 10_000,
                 running: HashSet::new(),
                 events: Vec::new(),
-                pid_map: HashMap::new(),
             })),
         }
     }
@@ -55,15 +53,13 @@ impl ProcessDriver for MockDriver {
         state.next_pid += 1;
         state.running.insert(service.name.to_string());
         state.events.push(format!("start:{}", service.name));
-        state.pid_map.insert(pid, service.name.to_string());
         Ok(pid)
     }
 
-    fn is_running(&self, pid: i32) -> bool {
+    fn is_running(&self, service: &ManagedService, _pid: i32) -> bool {
         let mut state = self.state.lock().expect("driver state poisoned");
-        let name = state.pid_map.get(&pid).cloned().unwrap_or_else(|| "unknown".into());
-        state.events.push(format!("status:{}", name));
-        state.running.contains(&name)
+        state.events.push(format!("status:{}", service.name));
+        state.running.contains(service.name)
     }
 
     fn signal(&self, service: &ManagedService, _pid: i32, force: bool) -> Result<bool, AppError> {
@@ -95,6 +91,7 @@ fn install_mock_driver() -> (DriverGuard, MockDriver) {
 fn clear_env() {
     for key in ["FUSION_OLLAMA_HOST", "FUSION_MLX_MODEL", "FUSION_MLX_PORT", "OLLAMA_HOST"] {
         unsafe {
+            // SAFETY: tests execute serially and reclaim environment variables afterwards.
             std::env::remove_var(key);
         }
     }

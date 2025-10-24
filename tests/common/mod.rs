@@ -14,6 +14,7 @@ impl CliTestContext {
         let root = TempDir::new().expect("failed to create temp root for tests");
         let original_root = env::var_os("FUSION_PROJECT_ROOT");
         unsafe {
+            // SAFETY: integration tests mutate process environment serially.
             env::set_var("FUSION_PROJECT_ROOT", root.path());
         }
         Self { root, original_root }
@@ -32,9 +33,11 @@ impl Drop for CliTestContext {
     fn drop(&mut self) {
         match &self.original_root {
             Some(value) => unsafe {
+                // SAFETY: restoration happens after tests finish using the variable.
                 env::set_var("FUSION_PROJECT_ROOT", value);
             },
             None => unsafe {
+                // SAFETY: restoration happens after tests finish using the variable.
                 env::remove_var("FUSION_PROJECT_ROOT");
             },
         }

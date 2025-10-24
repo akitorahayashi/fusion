@@ -88,6 +88,7 @@ mod tests {
             "FUSION_ENV_FILE",
         ] {
             unsafe {
+                // SAFETY: tests run serially and exclusively own the environment.
                 env::remove_var(key);
             }
         }

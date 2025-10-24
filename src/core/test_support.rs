@@ -16,6 +16,7 @@ impl TestProject {
         let root = TempDir::new().expect("failed to create temp project root");
         let original_root = env::var_os("FUSION_PROJECT_ROOT");
         unsafe {
+            // SAFETY: tests set a process-wide isolation variable before spawning threads.
             env::set_var("FUSION_PROJECT_ROOT", root.path());
         }
         Self { root, original_root }
@@ -41,9 +42,11 @@ impl Drop for TestProject {
     fn drop(&mut self) {
         match &self.original_root {
             Some(value) => unsafe {
+                // SAFETY: restoring the original project root is serialized at drop time.
                 env::set_var("FUSION_PROJECT_ROOT", value);
             },
             None => unsafe {
+                // SAFETY: restoring the original project root is serialized at drop time.
                 env::remove_var("FUSION_PROJECT_ROOT");
             },
         }

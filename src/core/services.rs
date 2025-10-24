@@ -65,6 +65,7 @@ mod tests {
     fn clear_env_vars() {
         for key in ["OLLAMA_HOST", "FUSION_OLLAMA_HOST", "FUSION_MLX_MODEL", "FUSION_MLX_PORT"] {
             unsafe {
+                // SAFETY: tests run serially and take exclusive control of env vars.
                 std::env::remove_var(key);
             }
         }
