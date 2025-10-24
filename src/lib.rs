@@ -1,9 +1,5 @@
-//! Library entry point exposing the core command handlers.
+//! Library entry point exposing the Fusion CLI surfaces.
 
-pub mod commands;
+pub mod cli;
+pub mod core;
 pub mod error;
-
-mod core;
-mod storage;
-
-pub use commands::{add, delete, list};
