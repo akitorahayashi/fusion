@@ -1,72 +1,86 @@
-# rs-cli-tmpl
+# Fusion CLI (Rust)
 
-`rs-cli-tmpl` is a reference template for building Rust-based command line tools with a clean,
-layered architecture. It demonstrates how to separate concerns across the CLI interface,
-application commands, pure core logic, and I/O abstractions so new projects can start from a
-well-tested foundation.
+The Fusion CLI is a Rust reimplementation of the original Typer-based tool that orchestrates local
+LLM runtimes for `menv` development. It manages the lifecycle of two services:
 
-## Architectural Highlights
+- **Ollama** – configured through `OLLAMA_*` and `FUSION_OLLAMA_HOST` variables.
+- **MLX** – configured through `FUSION_MLX_MODEL` and `FUSION_MLX_PORT` (defaults match the Python CLI).
 
-- **Three-tier structure** &mdash; `src/main.rs` handles CLI parsing, `src/commands.rs` wires
-  dependencies and user messaging, and `src/core/` keeps business rules testable via the
-  `Execute` trait.
-- **I/O abstraction** &mdash; `src/storage.rs` defines a `Storage` trait and a `FilesystemStorage`
-  implementation rooted at `~/.config/rs-cli-tmpl`, making it easy to swap storage backends.
-- **Robust testing strategy** &mdash; unit tests live next to their modules, `src/core/test_support.rs`
-  offers a `MockStorage` for core logic tests, and the `tests/` directory provides integration
-  suites for both the library API and the CLI binary.
+Managed processes log to the project `.tmp` directory and expose the same `.env` knobs as the legacy
+tool, letting existing workflows carry over unchanged.
 
-The template ships with minimal sample commands (`add`, `list`, and `delete`) that show how to
-thread dependencies through each layer. Replace or extend them with your own domain logic while
-reusing the same structure.
+## Getting Started
 
-## Storage Layout
+```bash
+# Install dependencies and build
+cargo build
 
-The template stores items under `~/.config/rs-cli-tmpl/<id>/item.txt`. For example, after running `rs-cli-tmpl add my-item --content '...'`:
+# Print CLI help
+cargo run -- llm --help
 
-```text
-~/.config/rs-cli-tmpl/
-  my-item/
-    item.txt
+# Start the default runtimes
+cargo run -- llm up
 ```
 
-## Quick Start
+### Binary installation
 
 ```bash
 cargo install --path .
-# or
-cargo build --release
+fusion llm up
 ```
 
-The optimized binary will be created at `target/release/rs-cli-tmpl`.
+## Configuration
 
-## Development Commands
+Fusion automatically loads a `.env` file located at the project root or pointed to by
+`FUSION_ENV_FILE`. The following variables mirror the Python implementation:
 
-- `cargo build` &mdash; build a debug binary.
-- `cargo build --release` &mdash; build the optimized release binary.
-- `cargo fmt` &mdash; format code using rustfmt.
-- `cargo fmt --check && cargo clippy --all-targets --all-features -- -D warnings` &mdash; format check and lint with clippy.
-- `RUST_TEST_THREADS=1 cargo test --all-targets --all-features` &mdash; run all tests.
-- `cargo fetch --locked` &mdash; pre-fetch dependencies.
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `FUSION_OLLAMA_HOST` / `OLLAMA_HOST` | Bind address for `ollama serve` | `0.0.0.0:11434` |
+| `OLLAMA_*` keys | Additional Ollama tuning parameters | See `src/core/env.rs` |
+| `FUSION_MLX_MODEL` | MLX model identifier | `mlx-community/Llama-3.2-3B-Instruct-4bit` |
+| `FUSION_MLX_PORT` | MLX server port | `8080` |
 
-## Testing Culture
+Logs and PID files are written to `<project-root>/.tmp`. You can override the target location for
+tests or tooling by setting `FUSION_PROJECT_ROOT`.
 
-- **Unit Tests**: Live alongside their modules inside `src/`, covering helper utilities and
-  filesystem boundaries.
-- **Core Logic Tests**: Use the mock storage in `src/core/test_support.rs` to exercise the
-  command implementations without touching the real filesystem.
-- **Integration Tests**: Located in the `tests/` directory. Separate crates cover the public
-  library API (`tests/commands_api.rs`) and CLI workflows (`tests/cli_commands.rs`,
-  `tests/cli_flow.rs`). Shared fixtures live in `tests/common/mod.rs`.
+## CLI Usage
 
-Run `cargo test` regularly&mdash;filesystem-heavy tests rely on the `serial_test` crate to avoid race
-conditions.
+```text
+fusion llm up            # start Ollama and MLX
+fusion llm down          # stop both services (graceful SIGTERM)
+fusion llm down --force  # force stop using SIGKILL
+fusion llm ps            # report whether services are running
+fusion llm logs          # print log file locations
+```
 
-## Adapting the Template
+All commands surface human-friendly console output and reuse the same messaging as the Python CLI.
 
-1. Replace the sample commands in `src/core/` with your own business logic.
-2. Extend `src/commands.rs` to wire new dependencies and expose public APIs.
-3. Update the CLI definitions in `src/main.rs` to match your command surface.
-4. Refresh the integration tests and documentation to describe the new behavior.
+## Testing
 
-Happy hacking!
+The project mirrors the original testing culture:
+
+- **Core unit tests** live next to modules in `src/core/`, covering environment parsing, service
+  definitions, and PID/file management.
+- **Integration tests** in `tests/llm_commands.rs` drive the CLI entry points with a mock process
+  driver, ensuring command wiring and messaging stay consistent without launching real runtimes.
+
+Run the full suite with:
+
+```bash
+cargo fmt --all
+cargo clippy --all-targets -- -D warnings
+cargo test
+```
+
+## Project Structure
+
+- `src/core/paths.rs` – project root and `.tmp` resolution
+- `src/core/env.rs` – `.env` loading and configuration defaults
+- `src/core/services.rs` – `ManagedService` definitions for Ollama and MLX
+- `src/core/process.rs` – PID/log helpers and pluggable process driver
+- `src/cli/llm.rs` – user-facing command handlers used by `src/main.rs`
+- `tests/llm_commands.rs` – integration coverage using the mock driver
+
+Refer to `fusion-prev/` for the original Python implementation when verifying feature parity. Remove
+that directory only after the Rust port has been fully validated in your environment.
