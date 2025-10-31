@@ -31,6 +31,7 @@ pub enum StatusOutcome {
 pub trait ProcessDriver: Send + Sync {
     fn spawn(&self, service: &ManagedService, log_path: &Path) -> Result<i32, AppError>;
     fn is_running(&self, service: &ManagedService, pid: i32) -> bool;
+    fn is_running_by_signature(&self, service: &ManagedService) -> Option<i32>;
     fn signal(&self, service: &ManagedService, pid: i32, force: bool) -> Result<bool, AppError>;
     fn kill_by_signature(&self, service: &ManagedService, force: bool) -> Result<usize, AppError>;
 }
@@ -58,7 +59,7 @@ impl SystemProcessDriver {
     }
 
     fn matches_signature(expected: &str, process: &sysinfo::Process) -> bool {
-        Self::process_signature(process).starts_with(expected)
+        Self::process_signature(process).contains(expected)
     }
 
     fn refresh_processes(system: &mut System) {
@@ -109,6 +110,18 @@ impl ProcessDriver for SystemProcessDriver {
                 .process(sys_pid)
                 .map(|process| Self::matches_signature(&expected, process))
                 .unwrap_or(false)
+        })
+    }
+
+    fn is_running_by_signature(&self, service: &ManagedService) -> Option<i32> {
+        let expected = Self::expected_signature(service);
+        self.with_system(|system| {
+            Self::refresh_processes(system);
+            system
+                .processes()
+                .values()
+                .find(|process| Self::matches_signature(&expected, process))
+                .map(|process| process.pid().as_u32() as i32)
         })
     }
 
@@ -202,6 +215,13 @@ pub fn status_service(service: &ManagedService) -> Result<StatusOutcome, AppErro
             return Ok(StatusOutcome::Running { pid });
         }
         remove_pid(service)?;
+    }
+
+    // Check if any process matches the signature (for daemonized services)
+    if let Some(pid) = with_driver(|driver| driver.is_running_by_signature(service)) {
+        // Write the PID file for future checks
+        write_pid(service, pid)?;
+        return Ok(StatusOutcome::Running { pid });
     }
 
     Ok(StatusOutcome::NotRunning)

@@ -62,6 +62,16 @@ impl ProcessDriver for MockDriver {
         state.running.contains(service.name)
     }
 
+    fn is_running_by_signature(&self, service: &ManagedService) -> Option<i32> {
+        let mut state = self.state.lock().expect("driver state poisoned");
+        state.events.push(format!("status-by-sig:{}", service.name));
+        if state.running.contains(service.name) {
+            Some(12345) // Mock PID
+        } else {
+            None
+        }
+    }
+
     fn signal(&self, service: &ManagedService, _pid: i32, force: bool) -> Result<bool, AppError> {
         let mut state = self.state.lock().expect("driver state poisoned");
         let removed = state.running.remove(service.name);
