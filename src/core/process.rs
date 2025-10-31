@@ -117,12 +117,11 @@ impl ProcessDriver for SystemProcessDriver {
         let expected = Self::expected_signature(service);
         self.with_system(|system| {
             Self::refresh_processes(system);
-            for process in system.processes().values() {
-                if Self::matches_signature(&expected, process) {
-                    return Some(process.pid().as_u32() as i32);
-                }
-            }
-            None
+            system
+                .processes()
+                .values()
+                .find(|process| Self::matches_signature(&expected, process))
+                .map(|process| process.pid().as_u32() as i32)
         })
     }
 
