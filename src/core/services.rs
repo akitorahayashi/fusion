@@ -83,7 +83,7 @@ pub fn default_services() -> Result<Vec<ManagedService>, AppError> {
         .unwrap_or((None, None));
     let ollama = create_ollama_service(ollama_host, ollama_port);
 
-    let mlx_dummy = create_mlx_service(None, None)?;
+    let mlx_dummy = create_mlx_service(None, Some(8080))?;
     let (mlx_host, mlx_port) =
         process::read_config(&mlx_dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
     let mlx = create_mlx_service(mlx_host, mlx_port)?;
