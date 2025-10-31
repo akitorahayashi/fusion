@@ -166,6 +166,7 @@ pub fn start_service(service: &ManagedService) -> Result<StartOutcome, AppError>
 
     let pid = with_driver(|driver| driver.spawn(service, &log_path))?;
     write_pid(service, pid)?;
+    write_config(service)?;
 
     Ok(StartOutcome::Started { pid })
 }
@@ -176,11 +177,14 @@ pub fn stop_service(service: &ManagedService, force: bool) -> Result<StopOutcome
             let signaled = with_driver(|driver| driver.signal(service, pid, force))?;
             if signaled {
                 remove_pid(service)?;
+                remove_config(service)?;
                 return Ok(StopOutcome::Stopped { pid, forced: force });
             }
             remove_pid(service)?;
+            remove_config(service)?;
         } else {
             remove_pid(service)?;
+            remove_config(service)?;
         }
     }
 
@@ -241,6 +245,57 @@ pub fn remove_pid(service: &ManagedService) -> Result<(), AppError> {
     }
 }
 
+pub fn write_config(service: &ManagedService) -> Result<(), AppError> {
+    ensure_pid_dir()?;
+    let path = service.config_path();
+    let mut handle = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
+    writeln!(handle, "host={}", service.host)?;
+    writeln!(handle, "port={}", service.port)?;
+    Ok(())
+}
+
+pub fn read_config(service: &ManagedService) -> Result<Option<(String, u16)>, AppError> {
+    let path = service.config_path();
+    match fs::read_to_string(&path) {
+        Ok(contents) => {
+            let mut host = None;
+            let mut port = None;
+            for line in contents.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if let Some((key, value)) = line.split_once('=') {
+                    match key.trim() {
+                        "host" => host = Some(value.trim().to_string()),
+                        "port" => {
+                            port = Some(value.trim().parse::<u16>().map_err(|_| {
+                                AppError::process_error(
+                                    service.name,
+                                    format!("invalid port value '{}'", value.trim()),
+                                )
+                            })?)
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            if let (Some(h), Some(p)) = (host, port) { Ok(Some((h, p))) } else { Ok(None) }
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(err.into()),
+    }
+}
+
+pub fn remove_config(service: &ManagedService) -> Result<(), AppError> {
+    let path = service.config_path();
+    match fs::remove_file(path) {
+        Ok(_) => Ok(()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(err) => Err(err.into()),
+    }
+}
+
 fn ensure_pid_dir() -> Result<(), AppError> {
     paths::ensure_pid_dir().map(|_| ()).map_err(AppError::from)
 }
@@ -273,9 +328,12 @@ mod tests {
     fn service(_project: &TestProject) -> ManagedService {
         ManagedService {
             name: "test",
+            host: "127.0.0.1".into(),
+            port: 4242,
             command: vec!["dummy".into()],
             log_filename: "test.log",
             pid_filename: "test.pid",
+            config_filename: "test.config",
             env: HashMap::new(),
         }
     }

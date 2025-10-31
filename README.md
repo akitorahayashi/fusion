@@ -1,4 +1,4 @@
-# Fusion CLI (Rust)
+## Overview
 
 The Fusion CLI is a Rust reimplementation of the original Typer-based tool that orchestrates local
 LLM runtimes for `menv` development. It manages the lifecycle of two services:
@@ -16,17 +16,19 @@ tool, letting existing workflows carry over unchanged.
 cargo build
 
 # Print CLI help
-cargo run -- llm --help
+cargo run -- --help
 
-# Start the default runtimes
-cargo run -- llm up
+# Start the managed runtimes
+cargo run -- ollama up
+cargo run -- mlx up
 ```
 
 ### Binary installation
 
 ```bash
 cargo install --path .
-fusion llm up
+fusion ollama up
+fusion mlx up
 ```
 
 ## Configuration
@@ -36,8 +38,9 @@ Fusion automatically loads a `.env` file located at the project root or pointed 
 
 | Variable | Purpose | Default |
 | --- | --- | --- |
-| `FUSION_OLLAMA_HOST` / `OLLAMA_HOST` | Bind address for `ollama serve` | `0.0.0.0:11434` |
+| `FUSION_OLLAMA_HOST` / `OLLAMA_HOST` | Bind address for `ollama serve` | `127.0.0.1:11434` |
 | `OLLAMA_*` keys | Additional Ollama tuning parameters | See `src/core/env.rs` |
+| `FUSION_MLX_HOST` | Bind address for `mlx_lm.server` | `127.0.0.1` |
 | `FUSION_MLX_MODEL` | MLX model identifier | `mlx-community/Llama-3.2-3B-Instruct-4bit` |
 | `FUSION_MLX_PORT` | MLX server port | `8080` |
 
@@ -47,12 +50,25 @@ tests or tooling by setting `FUSION_PROJECT_ROOT`.
 ## CLI Usage
 
 ```text
-fusion llm up            # start Ollama and MLX
-fusion llm down          # stop both services (graceful SIGTERM)
-fusion llm down --force  # force stop using SIGKILL
-fusion llm ps            # report whether services are running
-fusion llm logs          # print log file locations
+fusion ollama up [--host <IP>] [--port <PORT>]
+fusion ollama down [--force]
+fusion ollama ps
+fusion ollama logs
+
+# (aliases)
+fusion ol up
+
+fusion mlx up [--host <IP>] [--port <PORT>]
+fusion mlx down [--force]
+fusion mlx ps
+fusion mlx logs
+
+# global helpers across all services
+fusion ps
+fusion logs
 ```
+
+The `--host` and `--port` flags override the environment-driven defaults for each service, making it easy to bind Ollama or MLX to a different interface temporarily. When no overrides are provided, both runtimes listen on loopback (`127.0.0.1`).
 
 All commands surface human-friendly console output and reuse the same messaging as the Python CLI.
 
@@ -77,9 +93,9 @@ cargo test
 
 - `src/core/paths.rs` – project root and `.tmp` resolution
 - `src/core/env.rs` – `.env` loading and configuration defaults
-- `src/core/services.rs` – `ManagedService` definitions for Ollama and MLX
+- `src/core/services.rs` – `ManagedService` definitions for Ollama and MLX plus config-driven loaders
 - `src/core/process.rs` – PID/log helpers and pluggable process driver
-- `src/cli/llm.rs` – user-facing command handlers used by `src/main.rs`
+- `src/cli/llm.rs` – shared `ServiceType`-driven handlers consumed by `src/main.rs`
 - `tests/llm_commands.rs` – integration coverage using the mock driver
 
 Refer to `fusion-prev/` for the original Python implementation when verifying feature parity. Remove
