@@ -1,4 +1,4 @@
-use crate::core::{env, paths};
+use crate::core::{env, paths, process};
 use crate::error::AppError;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -11,6 +11,7 @@ pub struct ManagedService {
     pub command: Vec<String>,
     pub log_filename: &'static str,
     pub pid_filename: &'static str,
+    pub config_filename: &'static str,
     pub env: HashMap<String, String>,
 }
 
@@ -21,6 +22,10 @@ impl ManagedService {
 
     pub fn pid_path(&self) -> PathBuf {
         paths::pid_dir().join(self.pid_filename)
+    }
+
+    pub fn config_path(&self) -> PathBuf {
+        paths::pid_dir().join(self.config_filename)
     }
 }
 
@@ -39,6 +44,7 @@ pub fn create_ollama_service(
         command: vec!["ollama".into(), "serve".into()],
         log_filename: "ollama.log",
         pid_filename: "ollama.pid",
+        config_filename: "ollama.config",
         env: env_map,
     }
 }
@@ -65,12 +71,24 @@ pub fn create_mlx_service(
         ],
         log_filename: "mlx.log",
         pid_filename: "mlx.pid",
+        config_filename: "mlx.config",
         env: HashMap::new(),
     })
 }
 
 pub fn default_services() -> Result<Vec<ManagedService>, AppError> {
-    Ok(vec![create_ollama_service(None, None), create_mlx_service(None, None)?])
+    let ollama_dummy = create_ollama_service(None, None);
+    let (ollama_host, ollama_port) = process::read_config(&ollama_dummy)?
+        .map(|(h, p)| (Some(h), Some(p)))
+        .unwrap_or((None, None));
+    let ollama = create_ollama_service(ollama_host, ollama_port);
+
+    let mlx_dummy = create_mlx_service(None, None)?;
+    let (mlx_host, mlx_port) =
+        process::read_config(&mlx_dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+    let mlx = create_mlx_service(mlx_host, mlx_port)?;
+
+    Ok(vec![ollama, mlx])
 }
 
 #[cfg(test)]

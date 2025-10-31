@@ -83,19 +83,28 @@ pub fn handle_ollama_up(options: StartOptions) -> Result<(), AppError> {
 
 pub fn handle_ollama_down(force: bool) -> Result<(), AppError> {
     println!("🛑 Stopping Ollama...");
-    let service = services::create_ollama_service(None, None);
+    let dummy = services::create_ollama_service(None, None);
+    let (host_override, port_override) =
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+    let service = services::create_ollama_service(host_override, port_override);
     handle_service_down(service, force)
 }
 
 pub fn handle_ollama_ps() -> Result<(), AppError> {
     println!("ℹ️  Ollama status:");
-    let service = services::create_ollama_service(None, None);
+    let dummy = services::create_ollama_service(None, None);
+    let (host_override, port_override) =
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+    let service = services::create_ollama_service(host_override, port_override);
     handle_service_ps(service)
 }
 
 pub fn handle_ollama_logs() -> Result<(), AppError> {
     println!("📜 Ollama log location:");
-    let service = services::create_ollama_service(None, None);
+    let dummy = services::create_ollama_service(None, None);
+    let (host_override, port_override) =
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+    let service = services::create_ollama_service(host_override, port_override);
     handle_service_logs(service)
 }
 
@@ -108,19 +117,28 @@ pub fn handle_mlx_up(options: StartOptions) -> Result<(), AppError> {
 
 pub fn handle_mlx_down(force: bool) -> Result<(), AppError> {
     println!("🛑 Stopping MLX...");
-    let service = services::create_mlx_service(None, None)?;
+    let dummy = services::create_mlx_service(None, None)?;
+    let (host_override, port_override) =
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+    let service = services::create_mlx_service(host_override, port_override)?;
     handle_service_down(service, force)
 }
 
 pub fn handle_mlx_ps() -> Result<(), AppError> {
     println!("ℹ️  MLX status:");
-    let service = services::create_mlx_service(None, None)?;
+    let dummy = services::create_mlx_service(None, None)?;
+    let (host_override, port_override) =
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+    let service = services::create_mlx_service(host_override, port_override)?;
     handle_service_ps(service)
 }
 
 pub fn handle_mlx_logs() -> Result<(), AppError> {
     println!("📜 MLX log location:");
-    let service = services::create_mlx_service(None, None)?;
+    let dummy = services::create_mlx_service(None, None)?;
+    let (host_override, port_override) =
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+    let service = services::create_mlx_service(host_override, port_override)?;
     handle_service_logs(service)
 }
 

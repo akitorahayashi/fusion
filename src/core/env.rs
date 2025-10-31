@@ -111,9 +111,6 @@ pub fn ollama_environment() -> HashMap<String, String> {
         .map(|(k, v)| (k.to_string(), v.to_string())),
     );
 
-    let (host, port) = ollama_host_port(None, None);
-    env_map.insert("OLLAMA_HOST".into(), format_host_port(&host, port));
-
     env_map
 }
 
@@ -171,7 +168,7 @@ mod tests {
 
         let env_map = ollama_environment();
         assert_eq!(env_map.get("OLLAMA_CONTEXT_LENGTH").unwrap(), "4096");
-        assert_eq!(env_map.get("OLLAMA_HOST").unwrap(), OLLAMA_HOST_DEFAULT);
+        assert!(!env_map.contains_key("OLLAMA_HOST"));
     }
 
     #[test]
