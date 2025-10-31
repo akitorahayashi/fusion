@@ -89,7 +89,13 @@ fn install_mock_driver() -> (DriverGuard, MockDriver) {
 }
 
 fn clear_env() {
-    for key in ["FUSION_OLLAMA_HOST", "FUSION_MLX_MODEL", "FUSION_MLX_PORT", "OLLAMA_HOST"] {
+    for key in [
+        "FUSION_OLLAMA_HOST",
+        "FUSION_MLX_HOST",
+        "FUSION_MLX_MODEL",
+        "FUSION_MLX_PORT",
+        "OLLAMA_HOST",
+    ] {
         unsafe {
             // SAFETY: tests execute serially and reclaim environment variables afterwards.
             std::env::remove_var(key);
@@ -99,43 +105,69 @@ fn clear_env() {
 
 #[test]
 #[serial]
-fn llm_up_starts_all_services() {
+fn llm_ollama_up_starts_service() {
     clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up().expect("handle_up should succeed");
+    cli::handle_ollama_up(cli::StartOptions::default()).expect("handle_ollama_up should succeed");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "start:ollama"));
+}
+
+#[test]
+#[serial]
+fn llm_mlx_up_starts_service() {
+    clear_env();
+    let _ctx = CliTestContext::new();
+    let (_guard, driver) = install_mock_driver();
+
+    cli::handle_mlx_up(cli::StartOptions::default()).expect("handle_mlx_up should succeed");
+
+    let events = driver.events();
     assert!(events.iter().any(|e| e == "start:mlx"));
 }
 
 #[test]
 #[serial]
-fn llm_down_stops_running_services() {
+fn llm_ollama_down_stops_service() {
     clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up().expect("handle_up should succeed");
+    cli::handle_ollama_up(cli::StartOptions::default()).expect("handle_ollama_up should succeed");
     driver.reset_events();
-    cli::handle_down(false).expect("handle_down should succeed");
+    cli::handle_ollama_down(false).expect("handle_ollama_down should succeed");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "signal:ollama:false"));
+}
+
+#[test]
+#[serial]
+fn llm_mlx_down_stops_service() {
+    clear_env();
+    let _ctx = CliTestContext::new();
+    let (_guard, driver) = install_mock_driver();
+
+    cli::handle_mlx_up(cli::StartOptions::default()).expect("handle_mlx_up should succeed");
+    driver.reset_events();
+    cli::handle_mlx_down(false).expect("handle_mlx_down should succeed");
+
+    let events = driver.events();
     assert!(events.iter().any(|e| e == "signal:mlx:false"));
 }
 
 #[test]
 #[serial]
-fn llm_down_force_kills_when_not_running() {
+fn llm_force_down_kills_when_not_running() {
     clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    // No `handle_up` call so the driver should emit kill-miss events.
-    cli::handle_down(true).expect("force down should not error");
+    cli::handle_ollama_down(true).expect("force down for ollama should not error");
+    cli::handle_mlx_down(true).expect("force down for mlx should not error");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "kill-miss:ollama:true"));
@@ -144,12 +176,45 @@ fn llm_down_force_kills_when_not_running() {
 
 #[test]
 #[serial]
-fn llm_ps_queries_service_status() {
+fn llm_mlx_ps_queries_one_service() {
     clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up().expect("handle_up should succeed");
+    cli::handle_mlx_up(cli::StartOptions::default()).expect("handle_mlx_up should succeed");
+    driver.reset_events();
+    cli::handle_mlx_ps().expect("handle_mlx_ps should succeed");
+
+    let events = driver.events();
+    assert!(events.iter().any(|e| e == "status:mlx"));
+    assert!(events.iter().all(|e| !e.contains("status:ollama")));
+}
+
+#[test]
+#[serial]
+fn llm_ollama_ps_queries_one_service() {
+    clear_env();
+    let _ctx = CliTestContext::new();
+    let (_guard, driver) = install_mock_driver();
+
+    cli::handle_ollama_up(cli::StartOptions::default()).expect("handle_ollama_up should succeed");
+    driver.reset_events();
+    cli::handle_ollama_ps().expect("handle_ollama_ps should succeed");
+
+    let events = driver.events();
+    assert!(events.iter().any(|e| e == "status:ollama"));
+    assert!(events.iter().all(|e| !e.contains("status:mlx")));
+}
+
+#[test]
+#[serial]
+fn llm_global_ps_queries_all_services() {
+    clear_env();
+    let _ctx = CliTestContext::new();
+    let (_guard, driver) = install_mock_driver();
+
+    cli::handle_ollama_up(cli::StartOptions::default()).expect("handle_ollama_up should succeed");
+    cli::handle_mlx_up(cli::StartOptions::default()).expect("handle_mlx_up should succeed");
     driver.reset_events();
     cli::handle_ps().expect("handle_ps should succeed");
 

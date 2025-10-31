@@ -273,6 +273,8 @@ mod tests {
     fn service(_project: &TestProject) -> ManagedService {
         ManagedService {
             name: "test",
+            host: "127.0.0.1".into(),
+            port: 4242,
             command: vec!["dummy".into()],
             log_filename: "test.log",
             pid_filename: "test.pid",

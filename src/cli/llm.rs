@@ -1,93 +1,141 @@
 use crate::core::paths;
 use crate::core::process::{self, StartOutcome, StatusOutcome, StopOutcome};
-use crate::core::services;
+use crate::core::services::{self, ManagedService};
 use crate::error::AppError;
+use clap::Args;
 
-/// Start all managed LLM services.
-pub fn handle_up() -> Result<(), AppError> {
-    let services = services::default_services()?;
-    println!("🚀 Starting LLM runtimes...");
+#[derive(Debug, Clone, Default, Args)]
+pub struct StartOptions {
+    /// Specify the host (IP) to bind to
+    #[arg(long)]
+    pub host: Option<String>,
+    /// Specify the port to bind to
+    #[arg(long)]
+    pub port: Option<u16>,
+}
 
-    for service in services {
-        match process::start_service(&service)? {
-            StartOutcome::Started { pid } => {
-                println!("• {} started (pid {pid})", service.name);
-            }
-            StartOutcome::AlreadyRunning { pid } => {
-                println!("• {} already running (pid {pid})", service.name);
-            }
+fn handle_service_up(service: ManagedService) -> Result<(), AppError> {
+    match process::start_service(&service)? {
+        StartOutcome::Started { .. } => {
+            println!("• {} started on {}:{}", service.name, service.host, service.port);
+        }
+        StartOutcome::AlreadyRunning { .. } => {
+            println!("• {} already running on {}:{}", service.name, service.host, service.port);
         }
     }
-
     Ok(())
 }
 
-/// Stop all managed LLM services.
-pub fn handle_down(force: bool) -> Result<(), AppError> {
-    let services = services::default_services()?;
-    println!("🛑 Stopping LLM runtimes...");
-
-    for service in services {
-        match process::stop_service(&service, force)? {
-            StopOutcome::Stopped { pid, forced } => {
-                if forced {
-                    println!("• {} force-stopped (pid {pid})", service.name);
-                } else {
-                    println!("• {} stopped (pid {pid})", service.name);
-                }
-            }
-            StopOutcome::TerminatedByName { count, forced } => {
-                if forced {
-                    println!(
-                        "• {} stopped by name match ({} process{} killed with SIGKILL)",
-                        service.name,
-                        count,
-                        if count == 1 { "" } else { "es" }
-                    );
-                } else {
-                    println!(
-                        "• {} stopped by name match ({} process{} signaled)",
-                        service.name,
-                        count,
-                        if count == 1 { "" } else { "es" }
-                    );
-                }
-            }
-            StopOutcome::NotRunning => {
-                println!("• {} is not running", service.name);
+fn handle_service_down(service: ManagedService, force: bool) -> Result<(), AppError> {
+    match process::stop_service(&service, force)? {
+        StopOutcome::Stopped { forced, .. } => {
+            if forced {
+                println!("• {} force-stopped on {}:{}", service.name, service.host, service.port);
+            } else {
+                println!("• {} stopped on {}:{}", service.name, service.host, service.port);
             }
         }
+        StopOutcome::TerminatedByName { count, forced } => {
+            let action = if forced { "killed with SIGKILL" } else { "signaled" };
+            println!(
+                "• {} stopped by signature on {}:{} ({} process{} {action})",
+                service.name,
+                service.host,
+                service.port,
+                count,
+                if count == 1 { "" } else { "es" }
+            );
+        }
+        StopOutcome::NotRunning => {
+            println!("• {} is not running on {}:{}", service.name, service.host, service.port);
+        }
     }
-
     Ok(())
 }
 
-/// Report the status of managed LLM services.
-pub fn handle_ps() -> Result<(), AppError> {
-    let services = services::default_services()?;
-    println!("ℹ️  Status for LLM runtimes:");
-
-    for service in services {
-        match process::status_service(&service)? {
-            StatusOutcome::Running { pid } => {
-                println!("• {}: running (pid {pid})", service.name);
-            }
-            StatusOutcome::NotRunning => {
-                println!("• {}: not running", service.name);
-            }
+fn handle_service_ps(service: ManagedService) -> Result<(), AppError> {
+    match process::status_service(&service)? {
+        StatusOutcome::Running { pid } => {
+            println!(
+                "• {}: running on {}:{} (pid {pid})",
+                service.name, service.host, service.port
+            );
+        }
+        StatusOutcome::NotRunning => {
+            println!("• {}: not running on {}:{}", service.name, service.host, service.port);
         }
     }
-
     Ok(())
 }
 
-/// Display log file locations for managed LLM services.
-pub fn handle_logs() -> Result<(), AppError> {
-    let services = services::default_services()?;
+fn handle_service_logs(service: ManagedService) -> Result<(), AppError> {
     paths::ensure_pid_dir()?;
+    println!("• {}: {}", service.name, service.log_path().display());
+    Ok(())
+}
+
+pub fn handle_ollama_up(options: StartOptions) -> Result<(), AppError> {
+    println!("🚀 Starting Ollama...");
+    let StartOptions { host, port } = options;
+    let service = services::create_ollama_service(host, port);
+    handle_service_up(service)
+}
+
+pub fn handle_ollama_down(force: bool) -> Result<(), AppError> {
+    println!("🛑 Stopping Ollama...");
+    let service = services::create_ollama_service(None, None);
+    handle_service_down(service, force)
+}
+
+pub fn handle_ollama_ps() -> Result<(), AppError> {
+    println!("ℹ️  Ollama status:");
+    let service = services::create_ollama_service(None, None);
+    handle_service_ps(service)
+}
+
+pub fn handle_ollama_logs() -> Result<(), AppError> {
+    println!("📜 Ollama log location:");
+    let service = services::create_ollama_service(None, None);
+    handle_service_logs(service)
+}
+
+pub fn handle_mlx_up(options: StartOptions) -> Result<(), AppError> {
+    println!("🚀 Starting MLX...");
+    let StartOptions { host, port } = options;
+    let service = services::create_mlx_service(host, port)?;
+    handle_service_up(service)
+}
+
+pub fn handle_mlx_down(force: bool) -> Result<(), AppError> {
+    println!("🛑 Stopping MLX...");
+    let service = services::create_mlx_service(None, None)?;
+    handle_service_down(service, force)
+}
+
+pub fn handle_mlx_ps() -> Result<(), AppError> {
+    println!("ℹ️  MLX status:");
+    let service = services::create_mlx_service(None, None)?;
+    handle_service_ps(service)
+}
+
+pub fn handle_mlx_logs() -> Result<(), AppError> {
+    println!("📜 MLX log location:");
+    let service = services::create_mlx_service(None, None)?;
+    handle_service_logs(service)
+}
+
+pub fn handle_ps() -> Result<(), AppError> {
+    println!("ℹ️  Status for LLM runtimes:");
+    for service in services::default_services()? {
+        handle_service_ps(service)?;
+    }
+    Ok(())
+}
+
+pub fn handle_logs() -> Result<(), AppError> {
     println!("Log files:");
-    for service in services {
-        println!("• {}: {}", service.name, service.log_path().display());
+    for service in services::default_services()? {
+        handle_service_logs(service)?;
     }
     println!("Use 'tail -f <log>' to follow output.");
     Ok(())
