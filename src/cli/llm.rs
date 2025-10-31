@@ -119,7 +119,7 @@ pub fn handle_mlx_down(force: bool) -> Result<(), AppError> {
     println!("🛑 Stopping MLX...");
     let dummy = services::create_mlx_service(None, Some(8080))?;
     let (host_override, port_override) =
-        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, Some(8080)));
     let service = services::create_mlx_service(host_override, port_override)?;
     handle_service_down(service, force)
 }
@@ -128,7 +128,7 @@ pub fn handle_mlx_ps() -> Result<(), AppError> {
     println!("ℹ️  MLX status:");
     let dummy = services::create_mlx_service(None, Some(8080))?;
     let (host_override, port_override) =
-        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, Some(8080)));
     let service = services::create_mlx_service(host_override, port_override)?;
     handle_service_ps(service)
 }
@@ -137,7 +137,7 @@ pub fn handle_mlx_logs() -> Result<(), AppError> {
     println!("📜 MLX log location:");
     let dummy = services::create_mlx_service(None, Some(8080))?;
     let (host_override, port_override) =
-        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
+        process::read_config(&dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, Some(8080)));
     let service = services::create_mlx_service(host_override, port_override)?;
     handle_service_logs(service)
 }

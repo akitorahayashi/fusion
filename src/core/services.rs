@@ -86,7 +86,7 @@ pub fn default_services() -> Result<Vec<ManagedService>, AppError> {
     let mlx_dummy = create_mlx_service(None, Some(8080))?;
     let (mlx_host, mlx_port) =
         process::read_config(&mlx_dummy)?.map(|(h, p)| (Some(h), Some(p))).unwrap_or((None, None));
-    let mlx = create_mlx_service(mlx_host, mlx_port)?;
+    let mlx = create_mlx_service(mlx_host, mlx_port).unwrap_or_else(|_| create_mlx_service(Some("127.0.0.1".to_string()), Some(8080)).unwrap());
 
     Ok(vec![ollama, mlx])
 }
