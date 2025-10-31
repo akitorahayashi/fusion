@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use fusion::cli::{self, StartOptions};
+use fusion::cli::{self, ServiceType, StartOptions};
 use fusion::error::AppError;
 
 #[derive(Parser)]
@@ -48,18 +48,10 @@ fn main() {
     let cli = Cli::parse();
 
     let result: Result<(), AppError> = match cli.command {
-        Commands::Ollama(service_command) => match service_command {
-            ServiceCommands::Up(options) => cli::handle_ollama_up(options),
-            ServiceCommands::Down { force } => cli::handle_ollama_down(force),
-            ServiceCommands::Ps => cli::handle_ollama_ps(),
-            ServiceCommands::Logs => cli::handle_ollama_logs(),
-        },
-        Commands::Mlx(service_command) => match service_command {
-            ServiceCommands::Up(options) => cli::handle_mlx_up(options),
-            ServiceCommands::Down { force } => cli::handle_mlx_down(force),
-            ServiceCommands::Ps => cli::handle_mlx_ps(),
-            ServiceCommands::Logs => cli::handle_mlx_logs(),
-        },
+        Commands::Ollama(service_command) => {
+            handle_service_command(ServiceType::Ollama, service_command)
+        }
+        Commands::Mlx(service_command) => handle_service_command(ServiceType::Mlx, service_command),
         Commands::Ps => cli::handle_ps(),
         Commands::Logs => cli::handle_logs(),
     };
@@ -67,5 +59,17 @@ fn main() {
     if let Err(err) = result {
         eprintln!("Error: {err}");
         std::process::exit(1);
+    }
+}
+
+fn handle_service_command(
+    service_type: ServiceType,
+    command: ServiceCommands,
+) -> Result<(), AppError> {
+    match command {
+        ServiceCommands::Up(options) => cli::handle_up(service_type, options),
+        ServiceCommands::Down { force } => cli::handle_down(service_type, force),
+        ServiceCommands::Ps => cli::handle_ps_single(service_type),
+        ServiceCommands::Logs => cli::handle_logs_single(service_type),
     }
 }

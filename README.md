@@ -93,9 +93,9 @@ cargo test
 
 - `src/core/paths.rs` – project root and `.tmp` resolution
 - `src/core/env.rs` – `.env` loading and configuration defaults
-- `src/core/services.rs` – `ManagedService` definitions for Ollama and MLX
+- `src/core/services.rs` – `ManagedService` definitions for Ollama and MLX plus config-driven loaders
 - `src/core/process.rs` – PID/log helpers and pluggable process driver
-- `src/cli/llm.rs` – user-facing command handlers used by `src/main.rs`
+- `src/cli/llm.rs` – shared `ServiceType`-driven handlers consumed by `src/main.rs`
 - `tests/llm_commands.rs` – integration coverage using the mock driver
 
 Refer to `fusion-prev/` for the original Python implementation when verifying feature parity. Remove

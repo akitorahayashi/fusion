@@ -1,6 +1,12 @@
 pub mod llm;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ServiceType {
+    Ollama,
+    Mlx,
+}
+
 pub use llm::{
-    StartOptions, handle_logs, handle_mlx_down, handle_mlx_logs, handle_mlx_ps, handle_mlx_up,
-    handle_ollama_down, handle_ollama_logs, handle_ollama_ps, handle_ollama_up, handle_ps,
+    StartOptions, handle_down, handle_logs, handle_logs_single, handle_ps, handle_ps_single,
+    handle_up,
 };
