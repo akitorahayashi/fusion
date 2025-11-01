@@ -1,13 +1,9 @@
 ## Overview
 
-The Fusion CLI is a Rust reimplementation of the original Typer-based tool that orchestrates local
-LLM runtimes for `menv` development. It manages the lifecycle of two services:
-
-- **Ollama** – configured through `OLLAMA_*` and `FUSION_OLLAMA_HOST` variables.
-- **MLX** – configured through `FUSION_MLX_MODEL` and `FUSION_MLX_PORT` (defaults match the Python CLI).
-
-Managed processes log to the project `.tmp` directory and expose the same `.env` knobs as the legacy
-tool, letting existing workflows carry over unchanged.
+Fusion is a Rust CLI that manages local Ollama and MLX runtimes for development. It handles service
+startup, shutdown, status reporting, and now includes a first-class prompt runner that talks to the
+managed HTTP APIs directly. All behaviour is driven by a persistent TOML configuration file rather
+than ad-hoc environment variables, making the tool predictable across shells and sessions.
 
 ## Getting Started
 
@@ -33,53 +29,82 @@ fusion mlx up
 
 ## Configuration
 
-Fusion automatically loads a `.env` file located at the project root or pointed to by
-`FUSION_ENV_FILE`. The following variables mirror the Python implementation:
+Fusion stores all runtime settings in `~/.config/fusion/config.toml` (or the platform-equivalent
+`dirs::config_dir()`). The file is created on first use with sensible defaults and can be managed
+via the CLI:
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `FUSION_OLLAMA_HOST` / `OLLAMA_HOST` | Bind address for `ollama serve` | `127.0.0.1:11434` |
-| `OLLAMA_*` keys | Additional Ollama tuning parameters | See `src/core/env.rs` |
-| `FUSION_MLX_HOST` | Bind address for `mlx_lm.server` | `127.0.0.1` |
-| `FUSION_MLX_MODEL` | MLX model identifier | `mlx-community/Llama-3.2-3B-Instruct-4bit` |
-| `FUSION_MLX_PORT` | MLX server port | `8080` |
+```toml
+[ollama_server]
+host = "127.0.0.1"
+port = 11434
+OLLAMA_CONTEXT_LENGTH = "4096"
+OLLAMA_KEEP_ALIVE = "10m"
 
-Logs and PID files are written to `<project-root>/.tmp`. You can override the target location for
-tests or tooling by setting `FUSION_PROJECT_ROOT`.
+[ollama_run]
+model = "llama3.2:3b"
+system_prompt = "You are a helpful assistant."
+temperature = 0.8
+stream = true
+
+[mlx_server]
+host = "127.0.0.1"
+port = 8080
+model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
+
+[mlx_run]
+model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
+system_prompt = "You are a helpful assistant."
+temperature = 0.7
+stream = true
+```
+
+Use the `fusion <service> config ...` commands to inspect or update settings:
+
+```bash
+fusion ollama config show             # dump the current file
+fusion ollama config path             # print the path to config.toml
+fusion ollama config edit             # open the file in $EDITOR
+fusion ollama config set ollama_run.temperature 0.6
+```
+
+Logs and PID files remain under `<project-root>/.tmp`. Override the project root for tests by
+setting `FUSION_PROJECT_ROOT`; the config location can be redirected with `FUSION_CONFIG_DIR`.
 
 ## CLI Usage
 
 ```text
-fusion ollama up [--host <IP>] [--port <PORT>]
+fusion ollama up
 fusion ollama down [--force]
 fusion ollama ps
 fusion ollama logs
+fusion ollama run <prompt> [--model <name>] [--temperature <value>] [--system <prompt>]
+fusion ollama config <show|edit|path|set>
 
-# (aliases)
-fusion ol up
-
-fusion mlx up [--host <IP>] [--port <PORT>]
+fusion mlx up
 fusion mlx down [--force]
 fusion mlx ps
 fusion mlx logs
+fusion mlx run <prompt> [--model <name>] [--temperature <value>] [--system <prompt>]
+fusion mlx config <show|edit|path|set>
 
 # global helpers across all services
 fusion ps
 fusion logs
 ```
 
-The `--host` and `--port` flags override the environment-driven defaults for each service, making it easy to bind Ollama or MLX to a different interface temporarily. When no overrides are provided, both runtimes listen on loopback (`127.0.0.1`).
-
-All commands surface human-friendly console output and reuse the same messaging as the Python CLI.
+The `run` subcommand issues an HTTP request to the managed runtime using the defaults from
+`config.toml`, merging any CLI overrides for the model, system prompt, or temperature. The `config`
+family offers read/write access without leaving the terminal.
 
 ## Testing
 
 The project mirrors the original testing culture:
 
-- **Core unit tests** live next to modules in `src/core/`, covering environment parsing, service
-  definitions, and PID/file management.
+- **Core unit tests** live next to modules in `src/core/`, covering configuration persistence,
+  service construction, and process lifecycle helpers.
 - **Integration tests** in `tests/llm_commands.rs` drive the CLI entry points with a mock process
-  driver, ensuring command wiring and messaging stay consistent without launching real runtimes.
+  driver and lightweight HTTP stubs, ensuring command wiring, configuration updates, and prompt
+  execution stay consistent without launching real runtimes.
 
 Run the full suite with:
 
@@ -91,12 +116,9 @@ cargo test
 
 ## Project Structure
 
-- `src/core/paths.rs` – project root and `.tmp` resolution
-- `src/core/env.rs` – `.env` loading and configuration defaults
-- `src/core/services.rs` – `ManagedService` definitions for Ollama and MLX plus config-driven loaders
+- `src/core/paths.rs` – project root, PID directory, and config file resolution
+- `src/core/config.rs` – strongly-typed TOML configuration management
+- `src/core/services.rs` – `ManagedService` definitions plus config-driven loaders
 - `src/core/process.rs` – PID/log helpers and pluggable process driver
-- `src/cli/llm.rs` – shared `ServiceType`-driven handlers consumed by `src/main.rs`
+- `src/cli/llm.rs` – service command handlers (up/down/ps/logs) plus new run & config workflows
 - `tests/llm_commands.rs` – integration coverage using the mock driver
-
-Refer to `fusion-prev/` for the original Python implementation when verifying feature parity. Remove
-that directory only after the Rust port has been fully validated in your environment.

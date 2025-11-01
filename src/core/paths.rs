@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use std::path::PathBuf;
 use std::{env, fs};
 
@@ -18,6 +19,22 @@ pub fn ensure_pid_dir() -> std::io::Result<PathBuf> {
     let dir = pid_dir();
     fs::create_dir_all(&dir)?;
     Ok(dir)
+}
+
+/// Resolve the directory containing the persistent `config.toml` file.
+pub fn user_config_dir() -> Result<PathBuf, AppError> {
+    if let Some(override_dir) = env::var_os("FUSION_CONFIG_DIR") {
+        return Ok(PathBuf::from(override_dir));
+    }
+
+    dirs::config_dir()
+        .map(|dir| dir.join("fusion"))
+        .ok_or_else(|| AppError::config_error("Could not determine platform config directory"))
+}
+
+/// Resolve the absolute path to the user's persistent configuration file.
+pub fn user_config_file() -> Result<PathBuf, AppError> {
+    Ok(user_config_dir()?.join("config.toml"))
 }
 
 #[cfg(test)]
@@ -43,5 +60,24 @@ mod tests {
         let created = ensure_pid_dir().expect("pid directory should be created");
         assert_eq!(created, expected);
         assert!(expected.exists());
+    }
+
+    #[test]
+    #[serial]
+    fn user_config_dir_respects_override() {
+        let project = TestProject::new();
+        let override_path = project.root().join("config");
+        unsafe {
+            // SAFETY: tests run serially and restore the variable on drop.
+            env::set_var("FUSION_CONFIG_DIR", &override_path);
+        }
+
+        let resolved = user_config_dir().expect("config dir should resolve");
+        assert_eq!(resolved, override_path);
+
+        unsafe {
+            // SAFETY: tests run serially and can unset the variable afterwards.
+            env::remove_var("FUSION_CONFIG_DIR");
+        }
     }
 }
