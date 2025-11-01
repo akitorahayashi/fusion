@@ -17,16 +17,16 @@ pub struct ManagedService {
 }
 
 impl ManagedService {
-    pub fn log_path(&self) -> PathBuf {
-        paths::pid_dir().join(self.log_filename)
+    pub fn log_path(&self) -> Result<PathBuf, AppError> {
+        paths::service_state_dir(self.name).map(|dir| dir.join(self.log_filename))
     }
 
-    pub fn pid_path(&self) -> PathBuf {
-        paths::pid_dir().join(self.pid_filename)
+    pub fn pid_path(&self) -> Result<PathBuf, AppError> {
+        paths::service_state_dir(self.name).map(|dir| dir.join(self.pid_filename))
     }
 
-    pub fn config_path(&self) -> PathBuf {
-        paths::pid_dir().join(self.config_filename)
+    pub fn config_path(&self) -> Result<PathBuf, AppError> {
+        paths::service_state_dir(self.name).map(|dir| dir.join(self.config_filename))
     }
 }
 

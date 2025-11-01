@@ -39,7 +39,7 @@ pub struct MlxRunConfig {
     pub system_prompt: String,
     #[serde(default = "default_mlx_temperature")]
     pub temperature: f32,
-    #[serde(default = "default_stream_true")]
+    #[serde(default = "default_stream_false")]
     pub stream: bool,
 }
 
@@ -49,7 +49,7 @@ impl Default for MlxRunConfig {
             model: default_mlx_model(),
             system_prompt: default_mlx_system_prompt(),
             temperature: default_mlx_temperature(),
-            stream: default_stream_true(),
+            stream: default_stream_false(),
         }
     }
 }
@@ -74,6 +74,6 @@ fn default_mlx_temperature() -> f32 {
     0.7
 }
 
-fn default_stream_true() -> bool {
-    true
+fn default_stream_false() -> bool {
+    false
 }

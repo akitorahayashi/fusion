@@ -9,16 +9,15 @@ pub fn project_root() -> PathBuf {
         .unwrap_or_else(|| env::current_dir().expect("failed to resolve current directory"))
 }
 
-/// Return the directory used for PID and log files.
-pub fn pid_dir() -> PathBuf {
-    project_root().join(".tmp")
+pub fn ensure_pid_dir() -> Result<PathBuf, AppError> {
+    let dir = pid_dir()?;
+    fs::create_dir_all(&dir).map_err(AppError::from)?;
+    Ok(dir)
 }
 
-/// Ensure the PID directory exists on disk.
-pub fn ensure_pid_dir() -> std::io::Result<PathBuf> {
-    let dir = pid_dir();
-    fs::create_dir_all(&dir)?;
-    Ok(dir)
+/// Return the directory used for PID, log, and runtime config files.
+pub fn pid_dir() -> Result<PathBuf, AppError> {
+    user_config_dir()
 }
 
 /// Resolve the directory containing the persistent `config.toml` file.
@@ -27,14 +26,24 @@ pub fn user_config_dir() -> Result<PathBuf, AppError> {
         return Ok(PathBuf::from(override_dir));
     }
 
-    dirs::config_dir()
-        .map(|dir| dir.join("fusion"))
-        .ok_or_else(|| AppError::config_error("Could not determine platform config directory"))
+    dirs::home_dir()
+        .map(|dir| dir.join(".config").join("fusion"))
+        .ok_or_else(|| AppError::config_error("Could not determine home directory"))
 }
 
 /// Resolve the absolute path to the user's persistent configuration file.
 pub fn user_config_file() -> Result<PathBuf, AppError> {
     Ok(user_config_dir()?.join("config.toml"))
+}
+
+/// Resolve the service-specific directory for logs, PID, and state files.
+pub fn service_state_dir(service_name: &str) -> Result<PathBuf, AppError> {
+    Ok(user_config_dir()?.join(service_name))
+}
+
+/// Resolve the service-specific configuration file.
+pub fn service_config_file(service_name: &str) -> Result<PathBuf, AppError> {
+    Ok(service_state_dir(service_name)?.join("config.toml"))
 }
 
 #[cfg(test)]

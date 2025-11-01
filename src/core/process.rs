@@ -170,12 +170,12 @@ pub fn start_service(service: &ManagedService) -> Result<StartOutcome, AppError>
         remove_pid(service)?;
     }
 
-    let log_path = service.log_path();
+    let log_path = service.log_path()?;
     if let Some(parent) = log_path.parent() {
         fs::create_dir_all(parent)?;
-    } else {
-        fs::create_dir_all(paths::pid_dir())?;
     }
+
+    reset_log_file(&log_path)?;
 
     let pid = with_driver(|driver| driver.spawn(service, &log_path))?;
     write_pid(service, pid)?;
@@ -228,7 +228,7 @@ pub fn status_service(service: &ManagedService) -> Result<StatusOutcome, AppErro
 }
 
 pub fn read_pid(service: &ManagedService) -> Result<Option<i32>, AppError> {
-    let path = service.pid_path();
+    let path = service.pid_path()?;
     match fs::read_to_string(&path) {
         Ok(contents) => {
             let trimmed = contents.trim();
@@ -250,14 +250,17 @@ pub fn read_pid(service: &ManagedService) -> Result<Option<i32>, AppError> {
 
 pub fn write_pid(service: &ManagedService, pid: i32) -> Result<(), AppError> {
     ensure_pid_dir()?;
-    let path = service.pid_path();
+    let path = service.pid_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
     let mut handle = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
     writeln!(handle, "{pid}")?;
     Ok(())
 }
 
 pub fn remove_pid(service: &ManagedService) -> Result<(), AppError> {
-    let path = service.pid_path();
+    let path = service.pid_path()?;
     match fs::remove_file(path) {
         Ok(_) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -267,7 +270,10 @@ pub fn remove_pid(service: &ManagedService) -> Result<(), AppError> {
 
 pub fn write_config(service: &ManagedService) -> Result<(), AppError> {
     ensure_pid_dir()?;
-    let path = service.config_path();
+    let path = service.config_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
     let mut handle = OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
     writeln!(handle, "host={}", service.host)?;
     writeln!(handle, "port={}", service.port)?;
@@ -275,7 +281,7 @@ pub fn write_config(service: &ManagedService) -> Result<(), AppError> {
 }
 
 pub fn read_config(service: &ManagedService) -> Result<Option<(String, u16)>, AppError> {
-    let path = service.config_path();
+    let path = service.config_path()?;
     match fs::read_to_string(&path) {
         Ok(contents) => {
             let mut host = None;
@@ -308,7 +314,7 @@ pub fn read_config(service: &ManagedService) -> Result<Option<(String, u16)>, Ap
 }
 
 pub fn remove_config(service: &ManagedService) -> Result<(), AppError> {
-    let path = service.config_path();
+    let path = service.config_path()?;
     match fs::remove_file(path) {
         Ok(_) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
@@ -317,7 +323,12 @@ pub fn remove_config(service: &ManagedService) -> Result<(), AppError> {
 }
 
 fn ensure_pid_dir() -> Result<(), AppError> {
-    paths::ensure_pid_dir().map(|_| ()).map_err(AppError::from)
+    paths::ensure_pid_dir().map(|_| ())
+}
+
+fn reset_log_file(path: &Path) -> Result<(), AppError> {
+    OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
+    Ok(())
 }
 
 pub struct DriverGuard {
@@ -367,7 +378,7 @@ mod tests {
         write_pid(&svc, 1234).expect("pid should be written");
         let read = read_pid(&svc).expect("pid should be readable");
         assert_eq!(read, Some(1234));
-        assert!(svc.pid_path().exists());
+        assert!(svc.pid_path().unwrap().exists());
     }
 
     #[test]
@@ -378,7 +389,7 @@ mod tests {
 
         write_pid(&svc, 999).unwrap();
         remove_pid(&svc).expect("pid file should be removed");
-        assert!(!svc.pid_path().exists());
+        assert!(!svc.pid_path().unwrap().exists());
         remove_pid(&svc).expect("second removal should succeed");
     }
 
@@ -391,6 +402,6 @@ mod tests {
         write_pid(&svc, i32::MAX).unwrap();
         let status = status_service(&svc).expect("status check should succeed");
         assert!(matches!(status, StatusOutcome::NotRunning));
-        assert!(!svc.pid_path().exists(), "stale pid file should be removed");
+        assert!(!svc.pid_path().unwrap().exists(), "stale pid file should be removed");
     }
 }

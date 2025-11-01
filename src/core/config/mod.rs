@@ -73,7 +73,7 @@ fn write_config_to_path(path: &Path, config: &Config) -> Result<(), AppError> {
     Ok(())
 }
 
-fn ensure_config_exists() -> Result<(), AppError> {
+pub fn ensure_config_exists() -> Result<(), AppError> {
     let path = paths::user_config_file()?;
     if path.exists() {
         return Ok(());

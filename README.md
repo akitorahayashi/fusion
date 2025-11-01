@@ -1,3 +1,7 @@
+# Fusion
+
+A Rust CLI tool for managing local Ollama and MLX runtimes on **macOS**.
+
 ## Overview
 
 Fusion is a Rust CLI that manages local Ollama and MLX runtimes for development. It handles service
@@ -29,22 +33,27 @@ fusion mlx up
 
 ## Configuration
 
-Fusion stores all runtime settings in `~/.config/fusion/config.toml` (or the platform-equivalent
-`dirs::config_dir()`). The file is created on first use with sensible defaults and can be managed
-via the CLI:
+Fusion stores all runtime settings in `~/.config/fusion/config.toml` (or the platform-equivalent using `dirs::config_dir()`). The file is created on first use with sensible defaults and can be managed via the CLI:
+
+```bash
+fusion config show             # dump the current file
+fusion config path             # print the path to config.toml
+fusion config edit             # create symlink to edit
+fusion config reset            # reset to default values
+```
+
+The configuration file contains sections for both services:
 
 ```toml
 [ollama_server]
 host = "127.0.0.1"
 port = 11434
-OLLAMA_CONTEXT_LENGTH = "4096"
-OLLAMA_KEEP_ALIVE = "10m"
 
 [ollama_run]
 model = "llama3.2:3b"
 system_prompt = "You are a helpful assistant."
 temperature = 0.8
-stream = true
+stream = false
 
 [mlx_server]
 host = "127.0.0.1"
@@ -55,20 +64,12 @@ model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
 model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
 system_prompt = "You are a helpful assistant."
 temperature = 0.7
-stream = true
+stream = false
 ```
 
-Use the `fusion <service> config ...` commands to inspect or update settings:
-
-```bash
-fusion ollama config show             # dump the current file
-fusion ollama config path             # print the path to config.toml
-fusion ollama config edit             # open the file in $EDITOR
-fusion ollama config set ollama_run.temperature 0.6
-```
-
-Logs and PID files remain under `<project-root>/.tmp`. Override the project root for tests by
-setting `FUSION_PROJECT_ROOT`; the config location can be redirected with `FUSION_CONFIG_DIR`.
+Logs, PID files, and runtime state are stored under each service's directory in `~/.config/fusion/<service>/`.
+Override the project root for tests by setting `FUSION_PROJECT_ROOT`; the config location can be redirected
+with `FUSION_CONFIG_DIR`.
 
 ## CLI Usage
 
@@ -76,25 +77,25 @@ setting `FUSION_PROJECT_ROOT`; the config location can be redirected with `FUSIO
 fusion ollama up
 fusion ollama down [--force]
 fusion ollama ps
-fusion ollama logs
+fusion ollama log
 fusion ollama run <prompt> [--model <name>] [--temperature <value>] [--system <prompt>]
-fusion ollama config <show|edit|path|set>
 
 fusion mlx up
 fusion mlx down [--force]
 fusion mlx ps
-fusion mlx logs
+fusion mlx log
 fusion mlx run <prompt> [--model <name>] [--temperature <value>] [--system <prompt>]
-fusion mlx config <show|edit|path|set>
 
-# global helpers across all services
+# global commands
 fusion ps
-fusion logs
+fusion config <show|edit|path|reset>
 ```
 
 The `run` subcommand issues an HTTP request to the managed runtime using the defaults from
-`config.toml`, merging any CLI overrides for the model, system prompt, or temperature. The `config`
-family offers read/write access without leaving the terminal.
+`config.toml`, merging any CLI overrides for the model, system prompt, or temperature. Both
+services speak the OpenAI-compatible `/v1/chat/completions` API, so the CLI sends identical payloads
+and reuses the same streaming logic regardless of backend. The `config` family offers read/write
+access without leaving the terminal.
 
 ## Testing
 
@@ -120,5 +121,8 @@ cargo test
 - `src/core/config.rs` – strongly-typed TOML configuration management
 - `src/core/services.rs` – `ManagedService` definitions plus config-driven loaders
 - `src/core/process.rs` – PID/log helpers and pluggable process driver
-- `src/cli/llm.rs` – service command handlers (up/down/ps/logs) plus new run & config workflows
-- `tests/llm_commands.rs` – integration coverage using the mock driver
+- `src/cli/commands/` – lifecycle and configuration command handlers for managed runtimes
+- `src/cli/run/` – shared OpenAI-compatible run pipeline reused by each managed service
+- `tests/service_lifecycle.rs` – integration tests for service up/down/ps/log operations
+- `tests/run_commands.rs` – integration tests for run command execution and payload validation
+- `tests/config_commands.rs` – integration tests for configuration management
