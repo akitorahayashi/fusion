@@ -1,4 +1,4 @@
-pub mod env;
+pub mod config;
 pub mod paths;
 pub mod process;
 pub mod services;

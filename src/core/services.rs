@@ -1,4 +1,5 @@
-use crate::core::{env, paths, process};
+use crate::core::config::{Config, MlxServerConfig, OllamaServerConfig};
+use crate::core::{config, paths, process};
 use crate::error::AppError;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -29,18 +30,14 @@ impl ManagedService {
     }
 }
 
-pub fn create_ollama_service(
-    host_override: Option<String>,
-    port_override: Option<u16>,
-) -> ManagedService {
-    let (host, port) = env::ollama_host_port(host_override, port_override);
-    let mut env_map = env::ollama_environment();
-    env_map.insert("OLLAMA_HOST".into(), env::format_host_port(&host, port));
+pub fn create_ollama_service(cfg: &OllamaServerConfig) -> ManagedService {
+    let mut env_map = config::server_env(&cfg.extra, "OLLAMA_");
+    env_map.insert("OLLAMA_HOST".into(), config::format_host_port(&cfg.host, cfg.port));
 
     ManagedService {
         name: "ollama",
-        host,
-        port,
+        host: cfg.host.clone(),
+        port: cfg.port,
         command: vec!["ollama".into(), "serve".into()],
         log_filename: "ollama.log",
         pid_filename: "ollama.pid",
@@ -49,97 +46,91 @@ pub fn create_ollama_service(
     }
 }
 
-pub fn create_mlx_service(
-    host_override: Option<String>,
-    port_override: Option<u16>,
-) -> Result<ManagedService, AppError> {
-    let host = env::mlx_host(host_override);
-    let port = env::mlx_port(port_override)?;
+pub fn create_mlx_service(cfg: &MlxServerConfig) -> ManagedService {
+    let env_map = config::server_env(&cfg.extra, "MLX_");
 
-    Ok(ManagedService {
+    ManagedService {
         name: "mlx",
-        host: host.clone(),
-        port,
+        host: cfg.host.clone(),
+        port: cfg.port,
         command: vec![
             "mlx_lm.server".into(),
             "--model".into(),
-            env::mlx_model(),
+            cfg.model.clone(),
             "--host".into(),
-            host,
+            cfg.host.clone(),
             "--port".into(),
-            port.to_string(),
+            cfg.port.to_string(),
         ],
         log_filename: "mlx.log",
         pid_filename: "mlx.pid",
         config_filename: "mlx.config",
-        env: HashMap::new(),
-    })
-}
-
-pub fn load_ollama_service() -> Result<ManagedService, AppError> {
-    let dummy = create_ollama_service(None, None);
-    let (host_override, port_override) = process::read_config(&dummy)?
-        .map(|(host, port)| (Some(host), Some(port)))
-        .unwrap_or((None, None));
-    Ok(create_ollama_service(host_override, port_override))
-}
-
-pub fn load_mlx_service() -> Result<ManagedService, AppError> {
-    let dummy = create_mlx_service(None, Some(env::MLX_PORT_DEFAULT))?;
-    let (host_override, port_override) = process::read_config(&dummy)?
-        .map(|(host, port)| (Some(host), Some(port)))
-        .unwrap_or((None, None));
-
-    match create_mlx_service(host_override, port_override) {
-        Ok(service) => Ok(service),
-        Err(_) => create_mlx_service(Some(env::mlx_host(None)), Some(env::MLX_PORT_DEFAULT)),
+        env: env_map,
     }
 }
 
-pub fn default_services() -> Result<Vec<ManagedService>, AppError> {
-    Ok(vec![load_ollama_service()?, load_mlx_service()?])
+pub fn load_ollama_service(cfg: &OllamaServerConfig) -> Result<ManagedService, AppError> {
+    let mut service = create_ollama_service(cfg);
+    if let Some((host, port)) = process::read_config(&service)? {
+        service.host = host.clone();
+        service.port = port;
+        service.env.insert("OLLAMA_HOST".into(), config::format_host_port(&host, port));
+    }
+    Ok(service)
+}
+
+pub fn load_mlx_service(cfg: &MlxServerConfig) -> Result<ManagedService, AppError> {
+    let mut service = create_mlx_service(cfg);
+    if let Some((host, port)) = process::read_config(&service)? {
+        service.host = host.clone();
+        service.port = port;
+
+        // Rebuild command with updated host and port from runtime config
+        service.command = vec![
+            "mlx_lm.server".into(),
+            "--model".into(),
+            cfg.model.clone(),
+            "--host".into(),
+            host,
+            "--port".into(),
+            port.to_string(),
+        ];
+    }
+    Ok(service)
+}
+
+pub fn default_services(cfg: &Config) -> Result<Vec<ManagedService>, AppError> {
+    Ok(vec![load_ollama_service(&cfg.ollama_server)?, load_mlx_service(&cfg.mlx_server)?])
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::env::{MLX_PORT_DEFAULT, OLLAMA_HOST_DEFAULT, reset_cache_for_tests};
+    use crate::core::config;
     use crate::core::test_support::TestProject;
-
-    fn clear_env_vars() {
-        for key in ["OLLAMA_HOST", "FUSION_OLLAMA_HOST", "FUSION_MLX_MODEL", "FUSION_MLX_PORT"] {
-            unsafe {
-                // SAFETY: tests run serially and take exclusive control of env vars.
-                std::env::remove_var(key);
-            }
-        }
-    }
 
     #[test]
     #[serial_test::serial]
     fn ollama_service_uses_defaults() {
         let _project = TestProject::new();
-        clear_env_vars();
-        reset_cache_for_tests();
-
-        let service = create_ollama_service(None, None);
+        let cfg = config::Config::default();
+        let service = create_ollama_service(&cfg.ollama_server);
         assert_eq!(service.name, "ollama");
         assert_eq!(service.command, vec!["ollama", "serve"]);
         assert_eq!(service.log_filename, "ollama.log");
         assert_eq!(service.host, "127.0.0.1");
         assert_eq!(service.port, 11434);
-        assert_eq!(service.env.get("OLLAMA_HOST").unwrap(), OLLAMA_HOST_DEFAULT);
+        assert_eq!(service.env.get("OLLAMA_HOST").unwrap(), "127.0.0.1:11434");
     }
 
     #[test]
     #[serial_test::serial]
     fn default_services_includes_mlx() {
-        let project = TestProject::new();
-        clear_env_vars();
-        reset_cache_for_tests();
-        project.write_env_file("FUSION_MLX_PORT=5050\n");
+        let _project = TestProject::new();
+        let mut cfg = config::Config::default();
+        cfg.mlx_server.port = 5050;
 
-        let services = default_services().expect("services should resolve");
+        let services = default_services(&cfg).expect("services should resolve");
         assert_eq!(services.len(), 2);
         let mlx = services.iter().find(|svc| svc.name == "mlx").unwrap();
         assert!(mlx.command.contains(&"mlx_lm.server".to_string()));
@@ -152,14 +143,16 @@ mod tests {
     #[serial_test::serial]
     fn load_ollama_service_prefers_config_file() {
         let _project = TestProject::new();
-        clear_env_vars();
-        reset_cache_for_tests();
-
-        let configured = create_ollama_service(Some("10.0.0.1".to_string()), Some(1234));
+        let mut cfg = config::Config::default();
+        cfg.ollama_server.host = "127.0.0.1".into();
+        cfg.ollama_server.port = 11434;
+        let mut configured = create_ollama_service(&cfg.ollama_server);
+        configured.host = "10.0.0.1".into();
+        configured.port = 1234;
         // Ensure config file is written with custom values
         process::write_config(&configured).expect("config should be written");
 
-        let loaded = load_ollama_service().expect("ollama service should load");
+        let loaded = load_ollama_service(&cfg.ollama_server).expect("ollama service should load");
         assert_eq!(loaded.host, configured.host);
         assert_eq!(loaded.port, configured.port);
 
@@ -169,14 +162,19 @@ mod tests {
 
     #[test]
     #[serial_test::serial]
-    fn load_mlx_service_falls_back_on_invalid_env_port() {
-        let project = TestProject::new();
-        clear_env_vars();
-        project.write_env_file("FUSION_MLX_PORT=not-a-number\n");
-        reset_cache_for_tests();
+    fn load_mlx_service_prefers_runtime_config() {
+        let _project = TestProject::new();
+        let cfg = config::Config::default();
 
-        let service = load_mlx_service().expect("mlx service should fall back to defaults");
-        assert_eq!(service.port, MLX_PORT_DEFAULT);
-        assert_eq!(service.host, "127.0.0.1");
+        let mut configured = create_mlx_service(&cfg.mlx_server);
+        configured.host = "10.0.0.5".into();
+        configured.port = 5055;
+        process::write_config(&configured).expect("config write should succeed");
+
+        let service = load_mlx_service(&cfg.mlx_server).expect("mlx service should load");
+        assert_eq!(service.port, 5055);
+        assert_eq!(service.host, "10.0.0.5");
+
+        process::remove_config(&configured).expect("config removal should succeed");
     }
 }

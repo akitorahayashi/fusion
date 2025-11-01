@@ -1,6 +1,5 @@
 use std::env;
 use std::ffi::OsString;
-use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
@@ -8,6 +7,7 @@ use tempfile::TempDir;
 pub(crate) struct TestProject {
     root: TempDir,
     original_root: Option<OsString>,
+    original_config_dir: Option<OsString>,
 }
 
 impl TestProject {
@@ -15,11 +15,13 @@ impl TestProject {
     pub fn new() -> Self {
         let root = TempDir::new().expect("failed to create temp project root");
         let original_root = env::var_os("FUSION_PROJECT_ROOT");
+        let original_config_dir = env::var_os("FUSION_CONFIG_DIR");
         unsafe {
             // SAFETY: tests set a process-wide isolation variable before spawning threads.
             env::set_var("FUSION_PROJECT_ROOT", root.path());
+            env::set_var("FUSION_CONFIG_DIR", root.path().join(".config/fusion"));
         }
-        Self { root, original_root }
+        Self { root, original_root, original_config_dir }
     }
 
     /// Path to the temporary project root.
@@ -30,11 +32,6 @@ impl TestProject {
     /// Path to the `.tmp` directory relative to the temporary project root.
     pub fn pid_dir(&self) -> PathBuf {
         self.root().join(".tmp")
-    }
-
-    /// Create a custom `.env` file for tests.
-    pub fn write_env_file(&self, contents: &str) {
-        fs::write(self.root().join(".env"), contents).expect("failed to write .env file");
     }
 }
 
@@ -48,6 +45,17 @@ impl Drop for TestProject {
             None => unsafe {
                 // SAFETY: restoring the original project root is serialized at drop time.
                 env::remove_var("FUSION_PROJECT_ROOT");
+            },
+        }
+
+        match &self.original_config_dir {
+            Some(value) => unsafe {
+                // SAFETY: restoration of config dir happens after tests finish using it.
+                env::set_var("FUSION_CONFIG_DIR", value);
+            },
+            None => unsafe {
+                // SAFETY: restoration of config dir happens after tests finish using it.
+                env::remove_var("FUSION_CONFIG_DIR");
             },
         }
     }

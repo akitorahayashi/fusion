@@ -1,13 +1,18 @@
 mod common;
 
 use common::CliTestContext;
-use fusion::cli::{self, ServiceType};
+use fusion::cli::{self, RunOverrides, ServiceConfigCommand, ServiceType};
+use fusion::core::config::{load_config, save_config};
 use fusion::core::process::{DriverGuard, ProcessDriver, install_driver};
 use fusion::core::services::ManagedService;
 use fusion::error::AppError;
+use serde_json::Value;
 use serial_test::serial;
 use std::collections::HashSet;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 struct DriverState {
     next_pid: i32,
@@ -18,6 +23,12 @@ struct DriverState {
 #[derive(Clone)]
 struct MockDriver {
     state: Arc<Mutex<DriverState>>,
+}
+
+#[derive(Debug, Clone)]
+struct CapturedRequest {
+    line: String,
+    body: Value,
 }
 
 impl MockDriver {
@@ -98,30 +109,13 @@ fn install_mock_driver() -> (DriverGuard, MockDriver) {
     (guard, driver)
 }
 
-fn clear_env() {
-    for key in [
-        "FUSION_OLLAMA_HOST",
-        "FUSION_MLX_HOST",
-        "FUSION_MLX_MODEL",
-        "FUSION_MLX_PORT",
-        "OLLAMA_HOST",
-    ] {
-        unsafe {
-            // SAFETY: tests execute serially and reclaim environment variables afterwards.
-            std::env::remove_var(key);
-        }
-    }
-}
-
 #[test]
 #[serial]
 fn llm_ollama_up_starts_service() {
-    clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up(ServiceType::Ollama, cli::StartOptions::default())
-        .expect("ollama up should succeed");
+    cli::handle_up(ServiceType::Ollama).expect("ollama up should succeed");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "start:ollama"));
@@ -130,11 +124,10 @@ fn llm_ollama_up_starts_service() {
 #[test]
 #[serial]
 fn llm_mlx_up_starts_service() {
-    clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up(ServiceType::Mlx, cli::StartOptions::default()).expect("mlx up should succeed");
+    cli::handle_up(ServiceType::Mlx).expect("mlx up should succeed");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "start:mlx"));
@@ -143,12 +136,10 @@ fn llm_mlx_up_starts_service() {
 #[test]
 #[serial]
 fn llm_ollama_down_stops_service() {
-    clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up(ServiceType::Ollama, cli::StartOptions::default())
-        .expect("ollama up should succeed");
+    cli::handle_up(ServiceType::Ollama).expect("ollama up should succeed");
     driver.reset_events();
     cli::handle_down(ServiceType::Ollama, false).expect("ollama down should succeed");
 
@@ -159,11 +150,10 @@ fn llm_ollama_down_stops_service() {
 #[test]
 #[serial]
 fn llm_mlx_down_stops_service() {
-    clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up(ServiceType::Mlx, cli::StartOptions::default()).expect("mlx up should succeed");
+    cli::handle_up(ServiceType::Mlx).expect("mlx up should succeed");
     driver.reset_events();
     cli::handle_down(ServiceType::Mlx, false).expect("mlx down should succeed");
 
@@ -174,7 +164,6 @@ fn llm_mlx_down_stops_service() {
 #[test]
 #[serial]
 fn llm_force_down_kills_when_not_running() {
-    clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
@@ -189,11 +178,10 @@ fn llm_force_down_kills_when_not_running() {
 #[test]
 #[serial]
 fn llm_mlx_ps_queries_one_service() {
-    clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up(ServiceType::Mlx, cli::StartOptions::default()).expect("mlx up should succeed");
+    cli::handle_up(ServiceType::Mlx).expect("mlx up should succeed");
     driver.reset_events();
     cli::handle_ps_single(ServiceType::Mlx).expect("mlx ps should succeed");
 
@@ -205,12 +193,10 @@ fn llm_mlx_ps_queries_one_service() {
 #[test]
 #[serial]
 fn llm_ollama_ps_queries_one_service() {
-    clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up(ServiceType::Ollama, cli::StartOptions::default())
-        .expect("ollama up should succeed");
+    cli::handle_up(ServiceType::Ollama).expect("ollama up should succeed");
     driver.reset_events();
     cli::handle_ps_single(ServiceType::Ollama).expect("ollama ps should succeed");
 
@@ -222,13 +208,11 @@ fn llm_ollama_ps_queries_one_service() {
 #[test]
 #[serial]
 fn llm_global_ps_queries_all_services() {
-    clear_env();
     let _ctx = CliTestContext::new();
     let (_guard, driver) = install_mock_driver();
 
-    cli::handle_up(ServiceType::Ollama, cli::StartOptions::default())
-        .expect("ollama up should succeed");
-    cli::handle_up(ServiceType::Mlx, cli::StartOptions::default()).expect("mlx up should succeed");
+    cli::handle_up(ServiceType::Ollama).expect("ollama up should succeed");
+    cli::handle_up(ServiceType::Mlx).expect("mlx up should succeed");
     driver.reset_events();
     cli::handle_ps().expect("handle_ps should succeed");
 
@@ -240,8 +224,95 @@ fn llm_global_ps_queries_all_services() {
 #[test]
 #[serial]
 fn llm_logs_reports_paths() {
-    clear_env();
     let ctx = CliTestContext::new();
     cli::handle_logs().expect("handle_logs should succeed");
     assert!(ctx.pid_dir().exists(), "log directory should be created");
+}
+
+#[test]
+#[serial]
+fn llm_ollama_run_sends_overrides() {
+    let _ctx = CliTestContext::new();
+    let listener = TcpListener::bind("127.0.0.1:0").expect("stub listener should bind");
+    let port = listener.local_addr().unwrap().port();
+    let capture: Arc<Mutex<Option<CapturedRequest>>> = Arc::new(Mutex::new(None));
+    let capture_thread = {
+        let capture = Arc::clone(&capture);
+        thread::spawn(move || {
+            let (stream, _) = listener.accept().expect("accept should succeed");
+            let mut reader = BufReader::new(stream);
+            let mut request_line = String::new();
+            reader.read_line(&mut request_line).expect("read request line");
+
+            let mut content_length = 0usize;
+            loop {
+                let mut header = String::new();
+                reader.read_line(&mut header).expect("read header");
+                if header.trim().is_empty() {
+                    break;
+                }
+                let lower = header.to_ascii_lowercase();
+                if let Some(value) = header.split(':').nth(1)
+                    && lower.starts_with("content-length")
+                {
+                    content_length = value.trim().parse::<usize>().expect("parse content length");
+                }
+            }
+
+            let mut body = vec![0u8; content_length];
+            reader.read_exact(&mut body).expect("read body");
+            let json: Value = serde_json::from_slice(&body).expect("valid JSON payload");
+            *capture.lock().expect("capture lock poisoned") =
+                Some(CapturedRequest { line: request_line.trim().to_string(), body: json });
+
+            let response_body = br#"{"response":"stubbed"}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+                response_body.len(),
+                String::from_utf8_lossy(response_body)
+            );
+            reader.get_mut().write_all(response.as_bytes()).expect("write response");
+            reader.get_mut().flush().ok();
+        })
+    };
+
+    let mut cfg = load_config().expect("load_config should succeed");
+    cfg.ollama_server.port = port;
+    cfg.ollama_run.stream = false;
+    save_config(&cfg).expect("save_config should succeed");
+
+    let overrides = RunOverrides {
+        model: Some("custom-model".into()),
+        temperature: Some(0.5),
+        system: Some("system message".into()),
+    };
+
+    cli::handle_run(ServiceType::Ollama, "Hello AI".into(), overrides).expect("run should succeed");
+
+    capture_thread.join().expect("stub thread should join");
+    let captured =
+        capture.lock().expect("capture lock poisoned").clone().expect("request should be captured");
+
+    assert_eq!(captured.line, "POST /api/generate HTTP/1.1");
+    assert_eq!(captured.body["model"], "custom-model");
+    assert_eq!(captured.body["prompt"], "Hello AI");
+    assert_eq!(captured.body["options"]["temperature"], 0.5);
+    assert_eq!(captured.body["system"], "system message");
+}
+
+#[test]
+#[serial]
+fn llm_config_set_updates_file() {
+    let _ctx = CliTestContext::new();
+    // Ensure the config file exists before running the command.
+    let _ = load_config().expect("load_config should succeed");
+
+    cli::handle_config(
+        ServiceType::Ollama,
+        ServiceConfigCommand::Set { key: "ollama_server.port".into(), value: "22222".into() },
+    )
+    .expect("config set should succeed");
+
+    let updated = load_config().expect("reload should succeed");
+    assert_eq!(updated.ollama_server.port, 22222);
 }
