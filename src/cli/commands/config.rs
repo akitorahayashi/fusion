@@ -81,7 +81,7 @@ fn print_config_path() -> Result<(), AppError> {
 
 fn reset_config() -> Result<(), AppError> {
     let path = paths::user_config_file()?;
-    
+
     // Remove the existing config file if it exists
     if path.exists() {
         fs::remove_file(&path).map_err(|err| {
@@ -89,7 +89,7 @@ fn reset_config() -> Result<(), AppError> {
         })?;
         println!("Removed existing config file: {}", path.display());
     }
-    
+
     // Recreate with defaults
     config::ensure_config_exists()?;
     println!("Created new config file with default values: {}", path.display());
