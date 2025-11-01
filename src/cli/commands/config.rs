@@ -10,6 +10,7 @@ pub enum ServiceConfigCommand {
     Show,
     Edit,
     Path,
+    Reset,
 }
 
 pub fn handle_config(command: ServiceConfigCommand) -> Result<(), AppError> {
@@ -17,6 +18,7 @@ pub fn handle_config(command: ServiceConfigCommand) -> Result<(), AppError> {
         ServiceConfigCommand::Show => show_config(),
         ServiceConfigCommand::Edit => edit_config(),
         ServiceConfigCommand::Path => print_config_path(),
+        ServiceConfigCommand::Reset => reset_config(),
     }
 }
 
@@ -74,5 +76,22 @@ fn edit_config() -> Result<(), AppError> {
 fn print_config_path() -> Result<(), AppError> {
     let path = paths::user_config_file()?;
     println!("{}", path.display());
+    Ok(())
+}
+
+fn reset_config() -> Result<(), AppError> {
+    let path = paths::user_config_file()?;
+    
+    // Remove the existing config file if it exists
+    if path.exists() {
+        fs::remove_file(&path).map_err(|err| {
+            AppError::config_error(format!("Failed to remove existing config file: {err}"))
+        })?;
+        println!("Removed existing config file: {}", path.display());
+    }
+    
+    // Recreate with defaults
+    config::ensure_config_exists()?;
+    println!("Created new config file with default values: {}", path.display());
     Ok(())
 }

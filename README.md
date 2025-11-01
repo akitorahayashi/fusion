@@ -39,6 +39,7 @@ Fusion stores all runtime settings in `~/.config/fusion/config.toml` (or the pla
 fusion config show             # dump the current file
 fusion config path             # print the path to config.toml
 fusion config edit             # create symlink to edit
+fusion config reset            # reset to default values
 ```
 
 The configuration file contains sections for both services:
@@ -87,7 +88,7 @@ fusion mlx run <prompt> [--model <name>] [--temperature <value>] [--system <prom
 
 # global commands
 fusion ps
-fusion config <show|edit|path>
+fusion config <show|edit|path|reset>
 ```
 
 The `run` subcommand issues an HTTP request to the managed runtime using the defaults from

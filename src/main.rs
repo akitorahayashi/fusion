@@ -70,6 +70,8 @@ enum ConfigCommands {
     Edit,
     /// Print the configuration file path
     Path,
+    /// Reset configuration file to default values
+    Reset,
 }
 
 fn main() {
@@ -111,5 +113,6 @@ fn map_config_command(cmd: ConfigCommands) -> ServiceConfigCommand {
         ConfigCommands::Show => ServiceConfigCommand::Show,
         ConfigCommands::Edit => ServiceConfigCommand::Edit,
         ConfigCommands::Path => ServiceConfigCommand::Path,
+        ConfigCommands::Reset => ServiceConfigCommand::Reset,
     }
 }
