@@ -54,8 +54,9 @@ pub fn load_config_document() -> Result<DocumentMut, AppError> {
 
 pub fn save_config_document(document: &DocumentMut) -> Result<(), AppError> {
     let path = paths::user_config_file()?;
-    let parent = path.parent().expect("config path should have parent");
-    fs::create_dir_all(parent)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
     let mut file = fs::File::create(&path)?;
     file.write_all(document.to_string().as_bytes())?;
     Ok(())
@@ -161,6 +162,7 @@ mod tests {
     use crate::core::test_support::TestProject;
 
     #[test]
+    #[serial_test::serial]
     fn load_config_creates_default_file() {
         let _project = TestProject::new();
         let path = paths::user_config_file().expect("config path should resolve");
@@ -173,6 +175,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn save_and_reload_persists_changes() {
         let _project = TestProject::new();
         let mut cfg = load_config().expect("load_config should succeed");
@@ -186,6 +189,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn set_document_value_updates_nested_key() {
         let _project = TestProject::new();
         let mut document = load_config_document().expect("document should load");

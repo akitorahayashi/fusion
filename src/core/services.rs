@@ -82,19 +82,19 @@ pub fn load_ollama_service(cfg: &OllamaServerConfig) -> Result<ManagedService, A
 pub fn load_mlx_service(cfg: &MlxServerConfig) -> Result<ManagedService, AppError> {
     let mut service = create_mlx_service(cfg);
     if let Some((host, port)) = process::read_config(&service)? {
-        service.host = host;
+        service.host = host.clone();
         service.port = port;
-        // Update command host/port positions
-        if let Some(host_arg) = service.command.iter().position(|arg| arg == "--host")
-            && let Some(target) = service.command.get_mut(host_arg + 1)
-        {
-            *target = service.host.clone();
-        }
-        if let Some(port_arg) = service.command.iter().position(|arg| arg == "--port")
-            && let Some(target) = service.command.get_mut(port_arg + 1)
-        {
-            *target = service.port.to_string();
-        }
+
+        // Rebuild command with updated host and port from runtime config
+        service.command = vec![
+            "mlx_lm.server".into(),
+            "--model".into(),
+            cfg.model.clone(),
+            "--host".into(),
+            host,
+            "--port".into(),
+            port.to_string(),
+        ];
     }
     Ok(service)
 }

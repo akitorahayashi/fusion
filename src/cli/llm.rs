@@ -209,8 +209,20 @@ fn edit_config() -> Result<(), AppError> {
     let path = paths::user_config_file()?;
     let editor = env::var("EDITOR")
         .map_err(|_| AppError::config_error("$EDITOR is not set; cannot edit configuration"))?;
-    let status = Command::new(editor)
-        .arg(&path)
+
+    // Handle $EDITOR values with arguments (e.g., "code --wait", "vim -u ~/.vimrc")
+    let editor_parts: Vec<&str> = editor.split_whitespace().collect();
+    if editor_parts.is_empty() {
+        return Err(AppError::config_error("$EDITOR is empty"));
+    }
+
+    let mut command = Command::new(editor_parts[0]);
+    for arg in &editor_parts[1..] {
+        command.arg(arg);
+    }
+    command.arg(&path);
+
+    let status = command
         .status()
         .map_err(|err| AppError::config_error(format!("Failed to launch editor: {err}")))?;
     if !status.success() {
@@ -225,7 +237,11 @@ fn print_config_path() -> Result<(), AppError> {
     Ok(())
 }
 
-fn set_config_value(service_type: ServiceType, key: String, value: String) -> Result<(), AppError> {
+fn set_config_value(
+    _service_type: ServiceType,
+    key: String,
+    value: String,
+) -> Result<(), AppError> {
     let mut document = config::load_config_document()?;
     let segments: Vec<String> = key
         .split('.')
@@ -240,11 +256,7 @@ fn set_config_value(service_type: ServiceType, key: String, value: String) -> Re
     config::set_document_value(&mut document, &refs, inferred)?;
     config::save_config_document(&document)?;
 
-    println!(
-        "Updated {} configuration key '{}'",
-        service_label(service_type).to_lowercase(),
-        segments.join(".")
-    );
+    println!("Updated configuration key '{}'", segments.join("."));
     Ok(())
 }
 
