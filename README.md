@@ -68,7 +68,8 @@ fusion ollama config set ollama_run.temperature 0.6
 ```
 
 Logs and PID files remain under `<project-root>/.tmp`. Override the project root for tests by
-setting `FUSION_PROJECT_ROOT`; the config location can be redirected with `FUSION_CONFIG_DIR`.
+setting `FUSION_PROJECT_ROOT`; the config location defaults to `~/.config/fusion/` and can be
+redirected with `FUSION_CONFIG_DIR`.
 
 ## CLI Usage
 
@@ -93,8 +94,10 @@ fusion logs
 ```
 
 The `run` subcommand issues an HTTP request to the managed runtime using the defaults from
-`config.toml`, merging any CLI overrides for the model, system prompt, or temperature. The `config`
-family offers read/write access without leaving the terminal.
+`config.toml`, merging any CLI overrides for the model, system prompt, or temperature. Both
+services speak the OpenAI-compatible `/v1/chat/completions` API, so the CLI sends identical payloads
+and reuses the same streaming logic regardless of backend. The `config` family offers read/write
+access without leaving the terminal.
 
 ## Testing
 
@@ -120,5 +123,8 @@ cargo test
 - `src/core/config.rs` – strongly-typed TOML configuration management
 - `src/core/services.rs` – `ManagedService` definitions plus config-driven loaders
 - `src/core/process.rs` – PID/log helpers and pluggable process driver
-- `src/cli/llm.rs` – service command handlers (up/down/ps/logs) plus new run & config workflows
-- `tests/llm_commands.rs` – integration coverage using the mock driver
+- `src/cli/commands/` – lifecycle and configuration command handlers for managed runtimes
+- `src/cli/run/` – shared OpenAI-compatible run pipeline reused by each managed service
+- `tests/service_lifecycle.rs` – integration tests for service up/down/ps/logs operations
+- `tests/run_commands.rs` – integration tests for run command execution and payload validation
+- `tests/config_commands.rs` – integration tests for configuration management

@@ -27,9 +27,9 @@ pub fn user_config_dir() -> Result<PathBuf, AppError> {
         return Ok(PathBuf::from(override_dir));
     }
 
-    dirs::config_dir()
-        .map(|dir| dir.join("fusion"))
-        .ok_or_else(|| AppError::config_error("Could not determine platform config directory"))
+    dirs::home_dir()
+        .map(|dir| dir.join(".config").join("fusion"))
+        .ok_or_else(|| AppError::config_error("Could not determine home directory"))
 }
 
 /// Resolve the absolute path to the user's persistent configuration file.

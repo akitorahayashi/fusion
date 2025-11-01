@@ -1,42 +1,50 @@
-# rs-cli-tmpl Development Overview
+# Fusion Development Overview
+
+## Project Name
+fusion
 
 ## Project Summary
-`rs-cli-tmpl` is a reference template for building Rust-based command line tools with a clean, layered architecture. It demonstrates how to separate concerns across the CLI interface, application commands, pure core logic, and I/O abstractions, providing a well-tested foundation for new projects. The template includes sample commands (`add`, `list`, and `delete`) that can be replaced or extended with custom domain logic.
+Fusion is a Rust CLI that manages local Ollama and MLX runtimes for development. It handles service startup, shutdown, status reporting, and now includes a first-class prompt runner that talks to the managed HTTP APIs directly. All behaviour is driven by a persistent TOML configuration file rather than ad-hoc environment variables, making the tool predictable across shells and sessions.
 
 ## Tech Stack
-- **Language**: Rust
-- **CLI Parsing**: `clap`
-- **Development Dependencies**:
-  - `assert_cmd`
-  - `assert_fs`
-  - `predicates`
-  - `serial_test`
-  - `tempfile`
+- **Language**: Rust (Edition 2024)
+- **Key Libraries**:
+  - clap (4.5) - Command line argument parser
+  - dirs (5.0) - Standard directories
+  - reqwest (0.12) - HTTP client
+  - serde (1.0) - Serialization
+  - serde_json (1.0) - JSON handling
+  - sysinfo (0.30) - System information
+  - toml (0.8) - TOML parser
+  - toml_edit (0.22) - TOML editing
+- **Dev Dependencies**:
+  - assert_cmd (2.0) - Command assertion testing
+  - assert_fs (1.1) - Filesystem assertions
+  - predicates (3.1) - Value predicates
+  - serial_test (3.1) - Serial test execution
+  - tempfile (3.10) - Temporary files
 
 ## Coding Standards
-- **Formatter**: `rustfmt` is used for code formatting. Key rules include a maximum line width of 100 characters, crate-level import granularity, and grouping imports by standard, external, and crate modules.
-- **Linter**: `clippy` is used for linting, with a strict policy of treating all warnings as errors (`-D warnings`).
+- **Formatter**: rustfmt with max_width = 100, use_small_heuristics = "Max", use_field_init_shorthand = true
+- **Linter**: clippy with msrv = "1.90.0", cognitive-complexity-threshold = 25, too-many-arguments-threshold = 7, type-complexity-threshold = 250, single-char-binding-names-threshold = 4
 
 ## Naming Conventions
-- **Structs and Enums**: `PascalCase` (e.g., `Cli`, `Commands`)
-- **Functions and Variables**: `snake_case` (e.g., `run_tests`, `test_context`)
-- **Modules**: `snake_case` (e.g., `cli_commands.rs`)
+- **Functions and Variables**: snake_case (e.g., `handle_service_command`, `service_type`)
+- **Structs, Enums, Traits**: PascalCase (e.g., `Cli`, `Commands`, `ServiceType`)
+- **Constants**: SCREAMING_SNAKE_CASE (not extensively used in visible code)
+- **Modules**: snake_case (e.g., `cli`, `core`)
 
 ## Key Commands
-- **Build (Debug)**: `cargo build`
-- **Build (Release)**: `cargo build --release`
-- **Format Check**: `cargo fmt --check`
-- **Lint**: `cargo clippy --all-targets --all-features -- -D warnings`
-- **Test**: `RUST_TEST_THREADS=1 cargo test --all-targets --all-features`
+- **Build**: `cargo build`
+- **Run**: `cargo run -- <args>`
+- **Test**: `cargo test`
+- **Format**: `cargo fmt --all`
+- **Lint**: `cargo clippy --all-targets -- -D warnings`
+- **Install**: `cargo install --path .`
 
 ## Testing Strategy
-- **Unit Tests**: Located within the `src/` directory alongside the code they test, covering helper utilities and filesystem boundaries.
-- **Core Logic Tests**: Found in `src/core/`, utilizing mock storage (`src/core/test_support.rs`) to ensure business logic is tested in isolation via the `Execute` trait.
-- **Integration Tests**: Housed in the `tests/` directory, these tests cover the public library API and CLI user flows from an external perspective. Separate crates for API (`tests/commands_api.rs`) and CLI workflows (`tests/cli_commands.rs`, `tests/cli_flow.rs`), with shared fixtures in `tests/common/mod.rs`.
-- **CI**: GitHub Actions automatically runs build, linting, and test workflows, as defined in `.github/workflows/`.
-- **Sequential Testing**: The `serial_test` crate is employed for tests that interact with the filesystem to prevent race conditions.
-
-## Architectural Highlights
-- **Three-tier structure**: `src/main.rs` handles CLI parsing, `src/commands.rs` wires dependencies and user messaging, and `src/core/` keeps business rules testable.
-- **I/O abstraction**: `src/storage.rs` defines a `Storage` trait and a `FilesystemStorage` implementation rooted at `~/.config/rs-cli-tmpl`, making it easy to swap storage backends.
-- **Storage Layout**: Items are stored under `~/.config/rs-cli-tmpl/<id>/item.txt`.
+- **Framework**: Built-in Rust testing with cargo test
+- **Unit Tests**: Located next to modules in `src/core/`
+- **Integration Tests**: In `tests/` directory, using assert_cmd for CLI testing
+- **CI**: GitHub Actions workflows run tests on Ubuntu with `cargo test --all-targets --all-features`
+- **Coverage**: Not specified, but full suite run with RUST_TEST_THREADS=1

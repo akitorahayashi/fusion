@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 /// Integration test harness configuring an isolated Fusion workspace.
+#[allow(dead_code)]
 pub struct CliTestContext {
     root: TempDir,
     original_root: Option<OsString>,
@@ -23,10 +24,12 @@ impl CliTestContext {
         Self { root, original_root, original_config_dir }
     }
 
+    #[allow(dead_code)]
     pub fn root(&self) -> &Path {
         self.root.path()
     }
 
+    #[allow(dead_code)]
     pub fn pid_dir(&self) -> PathBuf {
         self.root().join(".tmp")
     }
