@@ -23,9 +23,6 @@ enum Commands {
     /// Display runtime status information for all services
     #[clap(visible_alias = "p")]
     Ps,
-    /// Show log file locations for managed runtimes
-    #[clap(visible_alias = "l")]
-    Logs,
 }
 
 #[derive(Subcommand)]
@@ -33,6 +30,7 @@ enum ServiceCommands {
     /// Start the service using configuration defaults
     Up,
     /// Stop the service
+    #[clap(visible_alias = "d")]
     Down {
         /// Force-stop services using SIGKILL
         #[arg(short, long, default_value_t = false)]
@@ -41,7 +39,8 @@ enum ServiceCommands {
     /// Display runtime status for this service
     Ps,
     /// Show log file locations for this service
-    Logs,
+    #[clap(visible_alias = "lg")]
+    Log,
     /// Run a prompt against the running service
     #[clap(visible_alias = "r")]
     Run {
@@ -67,7 +66,7 @@ enum ServiceCommands {
 enum ConfigCommands {
     /// Show the current configuration file contents
     Show,
-    /// Open the configuration file in $EDITOR
+    /// Create a symlink to the configuration file in the current directory
     Edit,
     /// Print the configuration file path
     Path,
@@ -89,7 +88,6 @@ fn main() {
         }
         Commands::Mlx(service_command) => handle_service_command(ServiceType::Mlx, service_command),
         Commands::Ps => cli::handle_ps(),
-        Commands::Logs => cli::handle_logs(),
     };
 
     if let Err(err) = result {
@@ -106,7 +104,7 @@ fn handle_service_command(
         ServiceCommands::Up => cli::handle_up(service_type),
         ServiceCommands::Down { force } => cli::handle_down(service_type, force),
         ServiceCommands::Ps => cli::handle_ps_single(service_type),
-        ServiceCommands::Logs => cli::handle_logs_single(service_type),
+        ServiceCommands::Log => cli::handle_logs_single(service_type),
         ServiceCommands::Run { prompt, model, temperature, system } => {
             let overrides = RunOverrides { model, temperature, system };
             cli::handle_run(service_type, prompt, overrides)

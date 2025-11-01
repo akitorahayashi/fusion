@@ -212,7 +212,7 @@ fn llm_global_ps_queries_all_services() {
 
 #[test]
 #[serial]
-fn llm_logs_reports_paths() {
+fn llm_log_reports_paths() {
     let ctx = CliTestContext::new();
     cli::handle_logs().expect("handle_logs should succeed");
     assert!(ctx.pid_dir().exists(), "log directory should be created");

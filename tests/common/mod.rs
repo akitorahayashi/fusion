@@ -31,7 +31,7 @@ impl CliTestContext {
 
     #[allow(dead_code)]
     pub fn pid_dir(&self) -> PathBuf {
-        self.root().join(".tmp")
+        self.root().join(".config/fusion")
     }
 }
 

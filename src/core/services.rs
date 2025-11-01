@@ -18,15 +18,21 @@ pub struct ManagedService {
 
 impl ManagedService {
     pub fn log_path(&self) -> PathBuf {
-        paths::pid_dir().join(self.log_filename)
+        paths::service_state_dir(self.name)
+            .map(|dir| dir.join(self.log_filename))
+            .unwrap_or_else(|_| paths::pid_dir().join(self.log_filename))
     }
 
     pub fn pid_path(&self) -> PathBuf {
-        paths::pid_dir().join(self.pid_filename)
+        paths::service_state_dir(self.name)
+            .map(|dir| dir.join(self.pid_filename))
+            .unwrap_or_else(|_| paths::pid_dir().join(self.pid_filename))
     }
 
     pub fn config_path(&self) -> PathBuf {
-        paths::pid_dir().join(self.config_filename)
+        paths::service_state_dir(self.name)
+            .map(|dir| dir.join(self.config_filename))
+            .unwrap_or_else(|_| paths::pid_dir().join(self.config_filename))
     }
 }
 

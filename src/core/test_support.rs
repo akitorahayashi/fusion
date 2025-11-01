@@ -29,9 +29,9 @@ impl TestProject {
         self.root.path()
     }
 
-    /// Path to the `.tmp` directory relative to the temporary project root.
+    /// Path to the config-backed runtime directory for the test project.
     pub fn pid_dir(&self) -> PathBuf {
-        self.root().join(".tmp")
+        self.root().join(".config/fusion")
     }
 }
 

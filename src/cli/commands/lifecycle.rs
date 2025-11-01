@@ -4,6 +4,10 @@ use crate::core::paths;
 use crate::core::process::{self, StartOutcome, StatusOutcome, StopOutcome};
 use crate::core::services::{self, ManagedService};
 use crate::error::AppError;
+use std::fs;
+use std::io;
+
+const LOG_TAIL_LINES: usize = 15;
 
 pub fn handle_up(service_type: ServiceType) -> Result<(), AppError> {
     println!("🚀 Starting {}...", service_label(service_type));
@@ -108,6 +112,24 @@ fn handle_service_ps(service: ManagedService) -> Result<(), AppError> {
 
 fn handle_service_logs(service: ManagedService) -> Result<(), AppError> {
     paths::ensure_pid_dir()?;
-    println!("• {}: {}", service.name, service.log_path().display());
+    let log_path = service.log_path();
+    println!("• {}: {}", service.name, log_path.display());
+    match fs::read_to_string(&log_path) {
+        Ok(contents) => {
+            for line in tail_lines(&contents, LOG_TAIL_LINES) {
+                println!("    {line}");
+            }
+        }
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {
+            println!("    (log file not found)");
+        }
+        Err(err) => return Err(err.into()),
+    }
     Ok(())
+}
+
+fn tail_lines(contents: &str, count: usize) -> Vec<String> {
+    let lines: Vec<_> = contents.lines().map(|line| line.to_string()).collect();
+    let start = lines.len().saturating_sub(count);
+    lines[start..].to_vec()
 }

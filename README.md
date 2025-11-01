@@ -29,47 +29,37 @@ fusion mlx up
 
 ## Configuration
 
-Fusion stores all runtime settings in `~/.config/fusion/config.toml` (or the platform-equivalent
-`dirs::config_dir()`). The file is created on first use with sensible defaults and can be managed
-via the CLI:
+Fusion stores service-specific configuration in separate TOML files under `~/.config/fusion/`:
+- `~/.config/fusion/ollama/config.toml` - Ollama configuration
+- `~/.config/fusion/mlx/config.toml` - MLX configuration
 
-```toml
-[ollama_server]
-host = "127.0.0.1"
-port = 11434
-OLLAMA_CONTEXT_LENGTH = "4096"
-OLLAMA_KEEP_ALIVE = "10m"
-
-[ollama_run]
-model = "llama3.2:3b"
-system_prompt = "You are a helpful assistant."
-temperature = 0.8
-stream = true
-
-[mlx_server]
-host = "127.0.0.1"
-port = 8080
-model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
-
-[mlx_run]
-model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
-system_prompt = "You are a helpful assistant."
-temperature = 0.7
-stream = true
-```
-
-Use the `fusion <service> config ...` commands to inspect or update settings:
+Each service maintains its own logs, PID files, and runtime state in its respective directory. The files
+are created on first use with sensible defaults and can be managed via the CLI:
 
 ```bash
 fusion ollama config show             # dump the current file
 fusion ollama config path             # print the path to config.toml
-fusion ollama config edit             # open the file in $EDITOR
+fusion ollama config edit             # create symlink to edit
 fusion ollama config set ollama_run.temperature 0.6
 ```
 
-Logs and PID files remain under `<project-root>/.tmp`. Override the project root for tests by
-setting `FUSION_PROJECT_ROOT`; the config location defaults to `~/.config/fusion/` and can be
-redirected with `FUSION_CONFIG_DIR`.
+Each service has separate configuration:
+
+```toml
+# ~/.config/fusion/ollama/config.toml
+[ollama_server]
+host = "127.0.0.1"
+port = 11434
+
+# ~/.config/fusion/mlx/config.toml
+[mlx_server]
+host = "127.0.0.1"
+port = 8080
+```
+
+Logs, PID files, and runtime state are stored under each service's directory in `~/.config/fusion/<service>/`.
+Override the project root for tests by setting `FUSION_PROJECT_ROOT`; the config location can be redirected
+with `FUSION_CONFIG_DIR`.
 
 ## CLI Usage
 
@@ -77,20 +67,19 @@ redirected with `FUSION_CONFIG_DIR`.
 fusion ollama up
 fusion ollama down [--force]
 fusion ollama ps
-fusion ollama logs
+fusion ollama log
 fusion ollama run <prompt> [--model <name>] [--temperature <value>] [--system <prompt>]
 fusion ollama config <show|edit|path|set>
 
 fusion mlx up
 fusion mlx down [--force]
 fusion mlx ps
-fusion mlx logs
+fusion mlx log
 fusion mlx run <prompt> [--model <name>] [--temperature <value>] [--system <prompt>]
 fusion mlx config <show|edit|path|set>
 
 # global helpers across all services
 fusion ps
-fusion logs
 ```
 
 The `run` subcommand issues an HTTP request to the managed runtime using the defaults from
@@ -125,6 +114,6 @@ cargo test
 - `src/core/process.rs` – PID/log helpers and pluggable process driver
 - `src/cli/commands/` – lifecycle and configuration command handlers for managed runtimes
 - `src/cli/run/` – shared OpenAI-compatible run pipeline reused by each managed service
-- `tests/service_lifecycle.rs` – integration tests for service up/down/ps/logs operations
+- `tests/service_lifecycle.rs` – integration tests for service up/down/ps/log operations
 - `tests/run_commands.rs` – integration tests for run command execution and payload validation
 - `tests/config_commands.rs` – integration tests for configuration management
