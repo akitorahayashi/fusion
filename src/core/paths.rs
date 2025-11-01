@@ -10,17 +10,14 @@ pub fn project_root() -> PathBuf {
 }
 
 pub fn ensure_pid_dir() -> Result<PathBuf, AppError> {
-    let dir = pid_dir();
+    let dir = pid_dir()?;
     fs::create_dir_all(&dir).map_err(AppError::from)?;
     Ok(dir)
 }
 
 /// Return the directory used for PID, log, and runtime config files.
-pub fn pid_dir() -> PathBuf {
-    match user_config_dir() {
-        Ok(dir) => dir,
-        Err(err) => panic!("Failed to resolve config directory: {err}"),
-    }
+pub fn pid_dir() -> Result<PathBuf, AppError> {
+    user_config_dir()
 }
 
 /// Resolve the directory containing the persistent `config.toml` file.

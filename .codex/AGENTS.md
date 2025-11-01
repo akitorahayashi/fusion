@@ -6,6 +6,9 @@ fusion
 ## Project Summary
 Fusion is a Rust CLI that manages local Ollama and MLX runtimes for development. It handles service startup, shutdown, status reporting, and now includes a first-class prompt runner that talks to the managed HTTP APIs directly. All behaviour is driven by a persistent TOML configuration file rather than ad-hoc environment variables, making the tool predictable across shells and sessions.
 
+## Platform Support
+**macOS-only** - This project is designed exclusively for macOS systems and does not support Windows or Linux.
+
 ## Tech Stack
 - **Language**: Rust (Edition 2024)
 - **Key Libraries**:

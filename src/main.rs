@@ -23,6 +23,10 @@ enum Commands {
     /// Display runtime status information for all services
     #[clap(visible_alias = "p")]
     Ps,
+    /// Manage global configuration
+    #[clap(visible_alias = "cf")]
+    #[command(subcommand)]
+    Config(ConfigCommands),
 }
 
 #[derive(Subcommand)]
@@ -56,10 +60,6 @@ enum ServiceCommands {
         #[arg(short, long)]
         system: Option<String>,
     },
-    /// Manage configuration for this service
-    #[clap(visible_alias = "cf")]
-    #[command(subcommand)]
-    Config(ConfigCommands),
 }
 
 #[derive(Subcommand)]
@@ -70,13 +70,6 @@ enum ConfigCommands {
     Edit,
     /// Print the configuration file path
     Path,
-    /// Set a configuration value (e.g. run.model llama3)
-    Set {
-        /// Dot-separated key to update (e.g. 'ollama_run.model')
-        key: String,
-        /// Value to write to the key
-        value: String,
-    },
 }
 
 fn main() {
@@ -88,6 +81,7 @@ fn main() {
         }
         Commands::Mlx(service_command) => handle_service_command(ServiceType::Mlx, service_command),
         Commands::Ps => cli::handle_ps(),
+        Commands::Config(config_command) => cli::handle_config(map_config_command(config_command)),
     };
 
     if let Err(err) = result {
@@ -109,9 +103,6 @@ fn handle_service_command(
             let overrides = RunOverrides { model, temperature, system };
             cli::handle_run(service_type, prompt, overrides)
         }
-        ServiceCommands::Config(subcommand) => {
-            cli::handle_config(service_type, map_config_command(subcommand))
-        }
     }
 }
 
@@ -120,6 +111,5 @@ fn map_config_command(cmd: ConfigCommands) -> ServiceConfigCommand {
         ConfigCommands::Show => ServiceConfigCommand::Show,
         ConfigCommands::Edit => ServiceConfigCommand::Edit,
         ConfigCommands::Path => ServiceConfigCommand::Path,
-        ConfigCommands::Set { key, value } => ServiceConfigCommand::Set { key, value },
     }
 }

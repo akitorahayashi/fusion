@@ -1,4 +1,3 @@
-use crate::cli::ServiceType;
 use crate::core::config;
 use crate::core::paths;
 use crate::error::AppError;
@@ -11,18 +10,13 @@ pub enum ServiceConfigCommand {
     Show,
     Edit,
     Path,
-    Set { key: String, value: String },
 }
 
-pub fn handle_config(
-    service_type: ServiceType,
-    command: ServiceConfigCommand,
-) -> Result<(), AppError> {
+pub fn handle_config(command: ServiceConfigCommand) -> Result<(), AppError> {
     match command {
         ServiceConfigCommand::Show => show_config(),
         ServiceConfigCommand::Edit => edit_config(),
         ServiceConfigCommand::Path => print_config_path(),
-        ServiceConfigCommand::Set { key, value } => set_config_value(service_type, key, value),
     }
 }
 
@@ -80,28 +74,5 @@ fn edit_config() -> Result<(), AppError> {
 fn print_config_path() -> Result<(), AppError> {
     let path = paths::user_config_file()?;
     println!("{}", path.display());
-    Ok(())
-}
-
-fn set_config_value(
-    _service_type: ServiceType,
-    key: String,
-    value: String,
-) -> Result<(), AppError> {
-    let mut document = config::load_config_document()?;
-    let segments: Vec<String> = key
-        .split('.')
-        .map(|segment| segment.trim().to_string())
-        .filter(|segment| !segment.is_empty())
-        .collect();
-    if segments.is_empty() {
-        return Err(AppError::config_error("Configuration key must not be empty"));
-    }
-    let refs: Vec<&str> = segments.iter().map(|segment| segment.as_str()).collect();
-    let inferred = config::infer_toml_edit_value(&value);
-    config::set_document_value(&mut document, &refs, inferred)?;
-    config::save_config_document(&document)?;
-
-    println!("Updated configuration key '{}'", segments.join("."));
     Ok(())
 }

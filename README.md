@@ -1,3 +1,7 @@
+# Fusion
+
+A Rust CLI tool for managing local Ollama and MLX runtimes on **macOS**.
+
 ## Overview
 
 Fusion is a Rust CLI that manages local Ollama and MLX runtimes for development. It handles service
@@ -29,32 +33,37 @@ fusion mlx up
 
 ## Configuration
 
-Fusion stores service-specific configuration in separate TOML files under `~/.config/fusion/`:
-- `~/.config/fusion/ollama/config.toml` - Ollama configuration
-- `~/.config/fusion/mlx/config.toml` - MLX configuration
-
-Each service maintains its own logs, PID files, and runtime state in its respective directory. The files
-are created on first use with sensible defaults and can be managed via the CLI:
+Fusion stores all runtime settings in `~/.config/fusion/config.toml` (or the platform-equivalent using `dirs::config_dir()`). The file is created on first use with sensible defaults and can be managed via the CLI:
 
 ```bash
-fusion ollama config show             # dump the current file
-fusion ollama config path             # print the path to config.toml
-fusion ollama config edit             # create symlink to edit
-fusion ollama config set ollama_run.temperature 0.6
+fusion config show             # dump the current file
+fusion config path             # print the path to config.toml
+fusion config edit             # create symlink to edit
 ```
 
-Each service has separate configuration:
+The configuration file contains sections for both services:
 
 ```toml
-# ~/.config/fusion/ollama/config.toml
 [ollama_server]
 host = "127.0.0.1"
 port = 11434
 
-# ~/.config/fusion/mlx/config.toml
+[ollama_run]
+model = "llama3.2:3b"
+system_prompt = "You are a helpful assistant."
+temperature = 0.8
+stream = false
+
 [mlx_server]
 host = "127.0.0.1"
 port = 8080
+model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
+
+[mlx_run]
+model = "mlx-community/Llama-3.2-3B-Instruct-4bit"
+system_prompt = "You are a helpful assistant."
+temperature = 0.7
+stream = false
 ```
 
 Logs, PID files, and runtime state are stored under each service's directory in `~/.config/fusion/<service>/`.
@@ -69,17 +78,16 @@ fusion ollama down [--force]
 fusion ollama ps
 fusion ollama log
 fusion ollama run <prompt> [--model <name>] [--temperature <value>] [--system <prompt>]
-fusion ollama config <show|edit|path|set>
 
 fusion mlx up
 fusion mlx down [--force]
 fusion mlx ps
 fusion mlx log
 fusion mlx run <prompt> [--model <name>] [--temperature <value>] [--system <prompt>]
-fusion mlx config <show|edit|path|set>
 
-# global helpers across all services
+# global commands
 fusion ps
+fusion config <show|edit|path>
 ```
 
 The `run` subcommand issues an HTTP request to the managed runtime using the defaults from

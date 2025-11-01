@@ -4,6 +4,7 @@ use crate::core::paths;
 use crate::core::process::{self, StartOutcome, StatusOutcome, StopOutcome};
 use crate::core::services::{self, ManagedService};
 use crate::error::AppError;
+use std::collections::VecDeque;
 use std::fs;
 use std::io;
 
@@ -112,7 +113,7 @@ fn handle_service_ps(service: ManagedService) -> Result<(), AppError> {
 
 fn handle_service_logs(service: ManagedService) -> Result<(), AppError> {
     paths::ensure_pid_dir()?;
-    let log_path = service.log_path();
+    let log_path = service.log_path()?;
     println!("• {}: {}", service.name, log_path.display());
     match fs::read_to_string(&log_path) {
         Ok(contents) => {
@@ -128,8 +129,13 @@ fn handle_service_logs(service: ManagedService) -> Result<(), AppError> {
     Ok(())
 }
 
-fn tail_lines(contents: &str, count: usize) -> Vec<String> {
-    let lines: Vec<_> = contents.lines().map(|line| line.to_string()).collect();
-    let start = lines.len().saturating_sub(count);
-    lines[start..].to_vec()
+fn tail_lines(contents: &str, count: usize) -> impl Iterator<Item = String> {
+    let mut lines = VecDeque::with_capacity(count);
+    for line in contents.lines() {
+        if lines.len() == count {
+            lines.pop_front();
+        }
+        lines.push_back(line.to_string());
+    }
+    lines.into_iter()
 }

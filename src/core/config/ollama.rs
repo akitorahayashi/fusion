@@ -36,7 +36,7 @@ pub struct OllamaRunConfig {
     pub system_prompt: String,
     #[serde(default = "default_ollama_temperature")]
     pub temperature: f32,
-    #[serde(default = "default_stream_true")]
+    #[serde(default = "default_stream_false")]
     pub stream: bool,
 }
 
@@ -46,7 +46,7 @@ impl Default for OllamaRunConfig {
             model: default_ollama_model(),
             system_prompt: default_ollama_system_prompt(),
             temperature: default_ollama_temperature(),
-            stream: default_stream_true(),
+            stream: default_stream_false(),
         }
     }
 }
@@ -71,8 +71,8 @@ fn default_ollama_temperature() -> f32 {
     0.7
 }
 
-fn default_stream_true() -> bool {
-    true
+fn default_stream_false() -> bool {
+    false
 }
 
 fn default_ollama_server_extra() -> BTreeMap<String, TomlValue> {
