@@ -12,15 +12,10 @@ const HEALTH_TIMEOUT_SECS: u64 = 30;
 pub fn handle_health_single(service_type: ServiceType) -> Result<(), AppError> {
     let cfg = load_config()?;
 
-    let (service, model_name) = match service_type {
-        ServiceType::Ollama => {
-            let svc = service_for_runtime(&cfg, ServiceType::Ollama)?;
-            (svc, cfg.ollama_server.model.clone())
-        }
-        ServiceType::Mlx => {
-            let svc = service_for_runtime(&cfg, ServiceType::Mlx)?;
-            (svc, cfg.mlx_server.model.clone())
-        }
+    let service = service_for_runtime(&cfg, service_type)?;
+    let model_name = match service_type {
+        ServiceType::Ollama => cfg.ollama_server.model.clone(),
+        ServiceType::Mlx => cfg.mlx_server.model.clone(),
     };
 
     let client = Client::builder()
@@ -56,7 +51,8 @@ pub fn handle_health_single(service_type: ServiceType) -> Result<(), AppError> {
         println!("✅ {}: Healthy (Inference success)", service.name);
         Ok(())
     } else {
-        let error_text = response.text().unwrap_or_default();
+        let error_text =
+            response.text().unwrap_or_else(|e| format!("<failed to read error body: {e}>"));
         Err(AppError::process_error(
             service.name,
             format!("Unhealthy. Status: {}, Error: {}", status, error_text),
