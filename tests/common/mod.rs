@@ -1,12 +1,12 @@
 use std::env;
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tempfile::TempDir;
 
 /// Integration test harness configuring an isolated Fusion workspace.
-#[allow(dead_code)]
 pub struct CliTestContext {
-    root: TempDir,
+    #[allow(dead_code)]
+    pub root: TempDir,
     original_root: Option<OsString>,
     original_config_dir: Option<OsString>,
 }
@@ -25,13 +25,8 @@ impl CliTestContext {
     }
 
     #[allow(dead_code)]
-    pub fn root(&self) -> &Path {
-        self.root.path()
-    }
-
-    #[allow(dead_code)]
     pub fn pid_dir(&self) -> PathBuf {
-        self.root().join(".config/fusion")
+        self.root.path().join(".config/fusion")
     }
 }
 

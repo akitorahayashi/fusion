@@ -1,7 +1,4 @@
-mod common;
-
 use assert_cmd::Command;
-use predicates::prelude::*;
 
 #[test]
 fn version_flag_works() {

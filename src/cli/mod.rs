@@ -17,10 +17,3 @@ pub(crate) fn service_label(service_type: ServiceType) -> &'static str {
         ServiceType::Mlx => "MLX",
     }
 }
-
-pub(crate) fn service_machine_name(service_type: ServiceType) -> &'static str {
-    match service_type {
-        ServiceType::Ollama => "ollama",
-        ServiceType::Mlx => "mlx",
-    }
-}

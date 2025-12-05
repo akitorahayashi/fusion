@@ -1,13 +1,9 @@
-mod common;
-
-use common::CliTestContext;
 use fusion::cli::{self, ServiceConfigCommand};
 use fusion::core::config::load_config;
 
 #[test]
 #[serial_test::serial]
 fn llm_config_show_works() {
-    let _ctx = CliTestContext::new();
     // Ensure the config file exists before running the command.
     let _ = load_config().expect("load_config should succeed");
 
@@ -17,8 +13,6 @@ fn llm_config_show_works() {
 #[test]
 #[serial_test::serial]
 fn llm_config_reset_restores_defaults() {
-    let _ctx = CliTestContext::new();
-
     // Modify the config
     let mut cfg = load_config().expect("load_config should succeed");
     cfg.ollama_server.port = 9999;
