@@ -1,9 +1,10 @@
 use clap::{Parser, Subcommand};
-use fusion::cli::{self, RunOverrides, ServiceConfigCommand, ServiceType};
+use fusion::cli::{self, ServiceConfigCommand, ServiceType};
 use fusion::error::AppError;
 
 #[derive(Parser)]
 #[command(name = "fusion")]
+#[command(version)]
 #[command(about = "Fusion CLI for managing local LLM runtimes", long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -45,21 +46,9 @@ enum ServiceCommands {
     /// Show log file locations for this service
     #[clap(visible_alias = "lg")]
     Log,
-    /// Run a prompt against the running service
-    #[clap(visible_alias = "r")]
-    Run {
-        /// The prompt to send to the model
-        prompt: String,
-        /// Override the configured model name
-        #[arg(short, long)]
-        model: Option<String>,
-        /// Override the configured sampling temperature
-        #[arg(short, long)]
-        temperature: Option<f32>,
-        /// Override the configured system prompt
-        #[arg(short, long)]
-        system: Option<String>,
-    },
+    /// Check health by running a minimal inference request
+    #[clap(visible_alias = "hl")]
+    Health,
 }
 
 #[derive(Subcommand)]
@@ -101,10 +90,7 @@ fn handle_service_command(
         ServiceCommands::Down { force } => cli::handle_down(service_type, force),
         ServiceCommands::Ps => cli::handle_ps_single(service_type),
         ServiceCommands::Log => cli::handle_logs_single(service_type),
-        ServiceCommands::Run { prompt, model, temperature, system } => {
-            let overrides = RunOverrides { model, temperature, system };
-            cli::handle_run(service_type, prompt, overrides)
-        }
+        ServiceCommands::Health => cli::handle_health_single(service_type),
     }
 }
 

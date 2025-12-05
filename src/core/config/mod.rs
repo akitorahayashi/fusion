@@ -19,11 +19,7 @@ pub struct Config {
     #[serde(default)]
     pub ollama_server: OllamaServerConfig,
     #[serde(default)]
-    pub ollama_run: OllamaRunConfig,
-    #[serde(default)]
     pub mlx_server: MlxServerConfig,
-    #[serde(default)]
-    pub mlx_run: MlxRunConfig,
     #[serde(default)]
     #[serde(flatten)]
     pub extra: BTreeMap<String, TomlValue>,
@@ -180,12 +176,12 @@ mod tests {
         let _project = TestProject::new();
         let mut cfg = load_config().expect("load_config should succeed");
         cfg.ollama_server.port = 12000;
-        cfg.mlx_run.stream = false;
+        cfg.mlx_server.model = "custom-model".to_string();
         save_config(&cfg).expect("save_config should succeed");
 
         let reloaded = load_config().expect("reload should succeed");
         assert_eq!(reloaded.ollama_server.port, 12000);
-        assert!(!reloaded.mlx_run.stream);
+        assert_eq!(reloaded.mlx_server.model, "custom-model");
     }
 
     #[test]
@@ -193,13 +189,13 @@ mod tests {
     fn set_document_value_updates_nested_key() {
         let _project = TestProject::new();
         let mut document = load_config_document().expect("document should load");
-        let key = vec!["ollama_run", "model"];
+        let key = vec!["ollama_server", "model"];
         set_document_value(&mut document, &key, TomlEditValue::from("custom-model"))
             .expect("set_document_value should succeed");
         save_config_document(&document).expect("save should succeed");
 
         let cfg = load_config().expect("reload should succeed");
-        assert_eq!(cfg.ollama_run.model, "custom-model");
+        assert_eq!(cfg.ollama_server.model, "custom-model");
     }
 
     #[test]

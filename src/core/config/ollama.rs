@@ -5,7 +5,6 @@ use toml::Value as TomlValue;
 pub const DEFAULT_OLLAMA_HOST: &str = "127.0.0.1";
 pub const DEFAULT_OLLAMA_PORT: u16 = 11434;
 pub const DEFAULT_OLLAMA_MODEL: &str = "llama3.2:3b";
-pub const DEFAULT_OLLAMA_SYSTEM_PROMPT: &str = "You are a helpful assistant.";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OllamaServerConfig {
@@ -13,6 +12,8 @@ pub struct OllamaServerConfig {
     pub host: String,
     #[serde(default = "default_ollama_port")]
     pub port: u16,
+    #[serde(default = "default_ollama_model")]
+    pub model: String,
     #[serde(default = "default_ollama_server_extra")]
     #[serde(flatten)]
     pub extra: BTreeMap<String, TomlValue>,
@@ -23,30 +24,8 @@ impl Default for OllamaServerConfig {
         Self {
             host: default_ollama_host(),
             port: default_ollama_port(),
-            extra: default_ollama_server_extra(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OllamaRunConfig {
-    #[serde(default = "default_ollama_model")]
-    pub model: String,
-    #[serde(default = "default_ollama_system_prompt")]
-    pub system_prompt: String,
-    #[serde(default = "default_ollama_temperature")]
-    pub temperature: f32,
-    #[serde(default = "default_stream_false")]
-    pub stream: bool,
-}
-
-impl Default for OllamaRunConfig {
-    fn default() -> Self {
-        Self {
             model: default_ollama_model(),
-            system_prompt: default_ollama_system_prompt(),
-            temperature: default_ollama_temperature(),
-            stream: default_stream_false(),
+            extra: default_ollama_server_extra(),
         }
     }
 }
@@ -61,18 +40,6 @@ fn default_ollama_port() -> u16 {
 
 fn default_ollama_model() -> String {
     DEFAULT_OLLAMA_MODEL.to_string()
-}
-
-fn default_ollama_system_prompt() -> String {
-    DEFAULT_OLLAMA_SYSTEM_PROMPT.to_string()
-}
-
-fn default_ollama_temperature() -> f32 {
-    0.7
-}
-
-fn default_stream_false() -> bool {
-    false
 }
 
 fn default_ollama_server_extra() -> BTreeMap<String, TomlValue> {
