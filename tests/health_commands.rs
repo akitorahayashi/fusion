@@ -44,15 +44,16 @@ fn test_health_inference_request(service_type: ServiceType, expected_model: &str
 
         // Verify minimal inference payload
         assert_eq!(json["model"], expected_model.as_str());
-        assert_eq!(json["max_tokens"], 10);
+        assert!(json.get("max_tokens").is_none());
         assert_eq!(json["stream"], false);
         let messages = json["messages"].as_array().expect("messages should be an array");
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0]["role"], "user");
-        assert_eq!(messages[0]["content"], "ping");
+        assert_eq!(messages[0]["content"], "Briefly introduce yourself in one sentence.");
 
         // Send success response
-        let response_body = br#"{"choices":[{"message":{"role":"assistant","content":"pong"}}]}"#;
+        let response_body =
+            br#"{"choices":[{"message":{"role":"assistant","content":"I am a mock LLM."}}]}"#;
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
             response_body.len(),
