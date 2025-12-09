@@ -44,7 +44,7 @@ fn test_health_inference_request(service_type: ServiceType, expected_model: &str
 
         // Verify minimal inference payload
         assert_eq!(json["model"], expected_model.as_str());
-        assert_eq!(json["max_tokens"], 10);
+        assert_eq!(json["max_tokens"], 1);
         assert_eq!(json["stream"], false);
         let messages = json["messages"].as_array().expect("messages should be an array");
         assert_eq!(messages.len(), 1);

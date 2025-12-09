@@ -75,6 +75,11 @@ fn with_driver<R>(f: impl FnOnce(&dyn ProcessDriver) -> R) -> R {
     f(&**guard)
 }
 
+/// Lightweight helper to check if a process is alive.
+pub fn is_process_alive(service: &ManagedService, pid: i32) -> bool {
+    with_driver(|driver| driver.is_running(service, pid))
+}
+
 impl ProcessDriver for SystemProcessDriver {
     fn spawn(&self, service: &ManagedService, log_path: &Path) -> Result<i32, AppError> {
         let stdout = OpenOptions::new().create(true).append(true).open(log_path)?;
@@ -329,6 +334,26 @@ fn ensure_pid_dir() -> Result<(), AppError> {
 fn reset_log_file(path: &Path) -> Result<(), AppError> {
     OpenOptions::new().create(true).write(true).truncate(true).open(path)?;
     Ok(())
+}
+
+/// Read the last `lines` lines of the service's stderr log.
+pub fn read_stderr_tail(service: &ManagedService, lines: usize) -> Option<String> {
+    let log_path = service.log_path().ok()?;
+    let contents = fs::read_to_string(log_path).ok()?;
+
+    if lines == 0 {
+        return Some(String::new());
+    }
+
+    let mut buffer = Vec::new();
+    for line in contents.lines() {
+        if buffer.len() == lines {
+            buffer.remove(0);
+        }
+        buffer.push(line.to_string());
+    }
+
+    Some(buffer.join("\n"))
 }
 
 pub struct DriverGuard {

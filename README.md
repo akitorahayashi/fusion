@@ -6,7 +6,9 @@ A Rust CLI tool for managing local Ollama and MLX runtimes on **macOS**.
 
 Fusion is a Rust CLI that manages local Ollama and MLX runtimes for development. It handles service
 startup, shutdown, status reporting, and includes an inference-based health check to verify that
-managed runtimes are ready to accept prompts. All behaviour is driven by a persistent TOML
+managed runtimes are ready to accept prompts. When you run `fusion <svc> up`, Fusion blocks until
+the corresponding runtime is actually ready to serve inference (or a startup timeout is reached),
+so a successful `up` means you can immediately send prompts. All behaviour is driven by a persistent TOML
 configuration file rather than ad-hoc environment variables, making the tool predictable across
 shells and sessions.
 
@@ -19,7 +21,7 @@ cargo build
 # Print CLI help
 cargo run -- --help
 
-# Start the managed runtimes
+# Start the managed runtimes (waits until they are ready)
 cargo run -- ollama up
 cargo run -- mlx up
 ```
@@ -84,8 +86,10 @@ fusion config <show|edit|path|reset>
 
 The `health` subcommand performs an inference-based liveness check by sending a minimal prompt
 ("ping") to the managed runtime's OpenAI-compatible `/v1/chat/completions` endpoint. This verifies
-that the service is not only running but actually capable of generating responses. The `config`
-family offers read/write access without leaving the terminal.
+that the service is not only running but actually capable of generating responses. The `up`
+subcommand now uses the same inference-based readiness check in a polling loop and will wait up to
+300 seconds for the model to load before timing out. The `config` family offers read/write access
+without leaving the terminal.
 
 ## Testing
 

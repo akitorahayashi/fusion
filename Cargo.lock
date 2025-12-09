@@ -342,7 +342,7 @@ dependencies = [
 
 [[package]]
 name = "fusion"
-version = "1.3.0"
+version = "1.4.0"
 dependencies = [
  "assert_cmd",
  "assert_fs",

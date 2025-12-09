@@ -1,5 +1,7 @@
 use super::shared::{load_config, service_for_runtime, service_for_up};
 use crate::cli::{ServiceType, service_label};
+use crate::core::config::Config;
+use crate::core::health;
 use crate::core::paths;
 use crate::core::process::{self, StartOutcome, StatusOutcome, StopOutcome};
 use crate::core::services::{self, ManagedService};
@@ -7,14 +9,18 @@ use crate::error::AppError;
 use std::collections::VecDeque;
 use std::fs;
 use std::io;
+use std::thread;
+use std::time::{Duration, Instant};
 
 const LOG_TAIL_LINES: usize = 15;
+const STARTUP_TIMEOUT_SECS: u64 = 300;
+const POLLING_INTERVAL_MS: u64 = 1000;
 
 pub fn handle_up(service_type: ServiceType) -> Result<(), AppError> {
     println!("🚀 Starting {}...", service_label(service_type));
     let cfg = load_config()?;
     let service = service_for_up(&cfg, service_type);
-    handle_service_up(service)
+    handle_service_up(service, &cfg)
 }
 
 pub fn handle_down(service_type: ServiceType, force: bool) -> Result<(), AppError> {
@@ -57,13 +63,27 @@ pub fn handle_logs() -> Result<(), AppError> {
     Ok(())
 }
 
-fn handle_service_up(service: ManagedService) -> Result<(), AppError> {
+fn model_name_for_service<'a>(service: &ManagedService, cfg: &'a Config) -> &'a str {
+    if service.name == "ollama" {
+        cfg.ollama_server.model.as_str()
+    } else {
+        cfg.mlx_server.model.as_str()
+    }
+}
+
+fn handle_service_up(service: ManagedService, cfg: &Config) -> Result<(), AppError> {
+    let model_name = model_name_for_service(&service, cfg);
+
     match process::start_service(&service)? {
-        StartOutcome::Started { .. } => {
-            println!("• {} started on {}:{}", service.name, service.host, service.port);
+        StartOutcome::Started { pid } => {
+            println!("• Process spawned with PID {}. Loading model...", pid);
+            wait_until_ready(&service, pid, model_name)?;
+            println!("✅ {} is ready on {}:{}", service.name, service.host, service.port);
         }
-        StartOutcome::AlreadyRunning { .. } => {
-            println!("• {} already running on {}:{}", service.name, service.host, service.port);
+        StartOutcome::AlreadyRunning { pid } => {
+            println!("• {} already running (pid {}). Checking health...", service.name, pid);
+            wait_until_ready(&service, pid, model_name)?;
+            println!("✅ {} is ready.", service.name);
         }
     }
     Ok(())
@@ -138,4 +158,33 @@ fn tail_lines(contents: &str, count: usize) -> impl Iterator<Item = String> {
         lines.push_back(line.to_string());
     }
     lines.into_iter()
+}
+
+fn wait_until_ready(service: &ManagedService, pid: i32, model_name: &str) -> Result<(), AppError> {
+    let start = Instant::now();
+    let timeout = Duration::from_secs(STARTUP_TIMEOUT_SECS);
+
+    println!(
+        "⏳ Waiting for {} to become ready (Timeout: {}s)...",
+        service.name, STARTUP_TIMEOUT_SECS
+    );
+
+    while start.elapsed() < timeout {
+        if !process::is_process_alive(service, pid) {
+            let log_tail = process::read_stderr_tail(service, 10).unwrap_or_default();
+            return Err(AppError::process_error(
+                service.name,
+                format!("Process died unexpectedly during startup.\nCheck logs:\n{}", log_tail),
+            ));
+        }
+
+        match health::check_inference_readiness(service, model_name, 2) {
+            Ok(_) => return Ok(()),
+            Err(_) => {
+                thread::sleep(Duration::from_millis(POLLING_INTERVAL_MS));
+            }
+        }
+    }
+
+    Err(AppError::process_error(service.name, "Timed out waiting for service to be ready."))
 }
