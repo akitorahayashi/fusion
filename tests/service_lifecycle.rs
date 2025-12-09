@@ -121,10 +121,10 @@ fn start_health_stub() -> (u16, thread::JoinHandle<()>) {
                 break;
             }
             let lower = header.to_ascii_lowercase();
-            if let Some(value) = header.split(':').nth(1) {
-                if lower.starts_with("content-length") {
-                    content_length = value.trim().parse::<usize>().expect("parse content length");
-                }
+            if let Some(value) = header.split(':').nth(1)
+                && lower.starts_with("content-length")
+            {
+                content_length = value.trim().parse::<usize>().expect("parse content length");
             }
         }
 

@@ -188,10 +188,10 @@ fn wait_until_ready(service: &ManagedService, pid: i32, model_name: &str) -> Res
 }
 
 fn startup_timeout_secs() -> u64 {
-    if let Ok(value) = std::env::var("FUSION_STARTUP_TIMEOUT_SECS") {
-        if let Ok(parsed) = value.parse::<u64>() {
-            return parsed;
-        }
+    if let Ok(value) = std::env::var("FUSION_STARTUP_TIMEOUT_SECS")
+        && let Ok(parsed) = value.parse::<u64>()
+    {
+        return parsed;
     }
     DEFAULT_STARTUP_TIMEOUT_SECS
 }
