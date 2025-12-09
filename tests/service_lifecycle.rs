@@ -2,12 +2,16 @@ mod common;
 
 use common::CliTestContext;
 use fusion::cli::{self, ServiceType};
+use fusion::core::config::{load_config, save_config};
 use fusion::core::process::{DriverGuard, ProcessDriver, install_driver};
 use fusion::core::services::ManagedService;
 use fusion::error::AppError;
 use serial_test::serial;
 use std::collections::HashSet;
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::TcpListener;
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 struct DriverState {
     next_pid: i32,
@@ -98,56 +102,124 @@ fn install_mock_driver() -> (DriverGuard, MockDriver) {
     (guard, driver)
 }
 
+fn start_health_stub() -> (u16, thread::JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("stub listener should bind");
+    let port = listener.local_addr().unwrap().port();
+
+    let handle = thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("accept should succeed");
+        let mut reader = BufReader::new(stream);
+
+        let mut request_line = String::new();
+        reader.read_line(&mut request_line).expect("read request line");
+
+        let mut content_length = 0usize;
+        loop {
+            let mut header = String::new();
+            reader.read_line(&mut header).expect("read header");
+            if header.trim().is_empty() {
+                break;
+            }
+            let lower = header.to_ascii_lowercase();
+            if let Some(value) = header.split(':').nth(1) {
+                if lower.starts_with("content-length") {
+                    content_length = value.trim().parse::<usize>().expect("parse content length");
+                }
+            }
+        }
+
+        if content_length > 0 {
+            let mut body = vec![0u8; content_length];
+            reader.read_exact(&mut body).expect("read body");
+        }
+
+        let response_body = br#"{"choices":[{"message":{"role":"assistant","content":"ready"}}]}"#;
+        let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
+            response_body.len(),
+            String::from_utf8_lossy(response_body)
+        );
+        reader.get_mut().write_all(response.as_bytes()).expect("write response");
+        reader.get_mut().flush().ok();
+    });
+
+    (port, handle)
+}
+
 #[test]
 #[serial]
 fn llm_ollama_up_starts_service() {
     let _ctx = CliTestContext::new();
-    let (_guard, driver) = install_mock_driver();
+    let (port, handle) = start_health_stub();
+    let mut cfg = load_config().expect("load_config should succeed");
+    cfg.ollama_server.port = port;
+    save_config(&cfg).expect("save_config should succeed");
 
+    let (_guard, driver) = install_mock_driver();
     cli::handle_up(ServiceType::Ollama).expect("ollama up should succeed");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "start:ollama"));
+
+    handle.join().expect("stub thread should join");
 }
 
 #[test]
 #[serial]
 fn llm_mlx_up_starts_service() {
     let _ctx = CliTestContext::new();
-    let (_guard, driver) = install_mock_driver();
+    let (port, handle) = start_health_stub();
+    let mut cfg = load_config().expect("load_config should succeed");
+    cfg.mlx_server.port = port;
+    save_config(&cfg).expect("save_config should succeed");
 
+    let (_guard, driver) = install_mock_driver();
     cli::handle_up(ServiceType::Mlx).expect("mlx up should succeed");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "start:mlx"));
+
+    handle.join().expect("stub thread should join");
 }
 
 #[test]
 #[serial]
 fn llm_ollama_down_stops_service() {
     let _ctx = CliTestContext::new();
-    let (_guard, driver) = install_mock_driver();
+    let (port, handle) = start_health_stub();
+    let mut cfg = load_config().expect("load_config should succeed");
+    cfg.ollama_server.port = port;
+    save_config(&cfg).expect("save_config should succeed");
 
+    let (_guard, driver) = install_mock_driver();
     cli::handle_up(ServiceType::Ollama).expect("ollama up should succeed");
     driver.reset_events();
     cli::handle_down(ServiceType::Ollama, false).expect("ollama down should succeed");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "signal:ollama:false"));
+
+    handle.join().expect("stub thread should join");
 }
 
 #[test]
 #[serial]
 fn llm_mlx_down_stops_service() {
     let _ctx = CliTestContext::new();
-    let (_guard, driver) = install_mock_driver();
+    let (port, handle) = start_health_stub();
+    let mut cfg = load_config().expect("load_config should succeed");
+    cfg.mlx_server.port = port;
+    save_config(&cfg).expect("save_config should succeed");
 
+    let (_guard, driver) = install_mock_driver();
     cli::handle_up(ServiceType::Mlx).expect("mlx up should succeed");
     driver.reset_events();
     cli::handle_down(ServiceType::Mlx, false).expect("mlx down should succeed");
 
     let events = driver.events();
     assert!(events.iter().any(|e| e == "signal:mlx:false"));
+
+    handle.join().expect("stub thread should join");
 }
 
 #[test]
@@ -168,8 +240,12 @@ fn llm_force_down_kills_when_not_running() {
 #[serial]
 fn llm_mlx_ps_queries_one_service() {
     let _ctx = CliTestContext::new();
-    let (_guard, driver) = install_mock_driver();
+    let (port, handle) = start_health_stub();
+    let mut cfg = load_config().expect("load_config should succeed");
+    cfg.mlx_server.port = port;
+    save_config(&cfg).expect("save_config should succeed");
 
+    let (_guard, driver) = install_mock_driver();
     cli::handle_up(ServiceType::Mlx).expect("mlx up should succeed");
     driver.reset_events();
     cli::handle_ps_single(ServiceType::Mlx).expect("mlx ps should succeed");
@@ -177,14 +253,20 @@ fn llm_mlx_ps_queries_one_service() {
     let events = driver.events();
     assert!(events.iter().any(|e| e == "status:mlx"));
     assert!(events.iter().all(|e| !e.contains("status:ollama")));
+
+    handle.join().expect("stub thread should join");
 }
 
 #[test]
 #[serial]
 fn llm_ollama_ps_queries_one_service() {
     let _ctx = CliTestContext::new();
-    let (_guard, driver) = install_mock_driver();
+    let (port, handle) = start_health_stub();
+    let mut cfg = load_config().expect("load_config should succeed");
+    cfg.ollama_server.port = port;
+    save_config(&cfg).expect("save_config should succeed");
 
+    let (_guard, driver) = install_mock_driver();
     cli::handle_up(ServiceType::Ollama).expect("ollama up should succeed");
     driver.reset_events();
     cli::handle_ps_single(ServiceType::Ollama).expect("ollama ps should succeed");
@@ -192,12 +274,21 @@ fn llm_ollama_ps_queries_one_service() {
     let events = driver.events();
     assert!(events.iter().any(|e| e == "status:ollama"));
     assert!(events.iter().all(|e| !e.contains("status:mlx")));
+
+    handle.join().expect("stub thread should join");
 }
 
 #[test]
 #[serial]
 fn llm_global_ps_queries_all_services() {
     let _ctx = CliTestContext::new();
+    let (ollama_port, handle_ollama) = start_health_stub();
+    let (mlx_port, handle_mlx) = start_health_stub();
+    let mut cfg = load_config().expect("load_config should succeed");
+    cfg.ollama_server.port = ollama_port;
+    cfg.mlx_server.port = mlx_port;
+    save_config(&cfg).expect("save_config should succeed");
+
     let (_guard, driver) = install_mock_driver();
 
     cli::handle_up(ServiceType::Ollama).expect("ollama up should succeed");
@@ -208,6 +299,9 @@ fn llm_global_ps_queries_all_services() {
     let events = driver.events();
     assert!(events.iter().any(|e| e == "status:ollama"));
     assert!(events.iter().any(|e| e == "status:mlx"));
+
+    handle_ollama.join().expect("stub thread should join");
+    handle_mlx.join().expect("stub thread should join");
 }
 
 #[test]

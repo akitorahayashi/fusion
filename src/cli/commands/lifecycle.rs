@@ -13,7 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const LOG_TAIL_LINES: usize = 15;
-const STARTUP_TIMEOUT_SECS: u64 = 300;
+const DEFAULT_STARTUP_TIMEOUT_SECS: u64 = 300;
 const POLLING_INTERVAL_MS: u64 = 1000;
 
 pub fn handle_up(service_type: ServiceType) -> Result<(), AppError> {
@@ -162,12 +162,10 @@ fn tail_lines(contents: &str, count: usize) -> impl Iterator<Item = String> {
 
 fn wait_until_ready(service: &ManagedService, pid: i32, model_name: &str) -> Result<(), AppError> {
     let start = Instant::now();
-    let timeout = Duration::from_secs(STARTUP_TIMEOUT_SECS);
+    let timeout_secs = startup_timeout_secs();
+    let timeout = Duration::from_secs(timeout_secs);
 
-    println!(
-        "⏳ Waiting for {} to become ready (Timeout: {}s)...",
-        service.name, STARTUP_TIMEOUT_SECS
-    );
+    println!("⏳ Waiting for {} to become ready (Timeout: {}s)...", service.name, timeout_secs);
 
     while start.elapsed() < timeout {
         if !process::is_process_alive(service, pid) {
@@ -187,4 +185,13 @@ fn wait_until_ready(service: &ManagedService, pid: i32, model_name: &str) -> Res
     }
 
     Err(AppError::process_error(service.name, "Timed out waiting for service to be ready."))
+}
+
+fn startup_timeout_secs() -> u64 {
+    if let Ok(value) = std::env::var("FUSION_STARTUP_TIMEOUT_SECS") {
+        if let Ok(parsed) = value.parse::<u64>() {
+            return parsed;
+        }
+    }
+    DEFAULT_STARTUP_TIMEOUT_SECS
 }
