@@ -15,12 +15,16 @@ pub fn handle_health_single(service_type: ServiceType) -> Result<(), AppError> {
         ServiceType::Mlx => cfg.mlx_server.model.clone(),
     };
 
+    let prompt = "Briefly introduce yourself in one sentence.";
+
     println!("🩺 Checking {} health (inference test)...", service.name);
     println!("   Model: {}", model_name);
-    println!("   Prompt: \"ping\"");
+    println!("   Prompt: \"{}\"", prompt);
 
-    health::check_inference_readiness(&service, &model_name, HEALTH_TIMEOUT_SECS)?;
+    let response = health::query_inference(&service, &model_name, prompt, HEALTH_TIMEOUT_SECS)?;
 
-    println!("✅ {}: Healthy (Inference success)", service.name);
+    println!("✅ {}: Healthy", service.name);
+    println!("📝 Response: {}", response.trim());
+
     Ok(())
 }

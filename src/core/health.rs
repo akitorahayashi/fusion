@@ -22,7 +22,6 @@ pub fn query_inference(
         config::format_host_port(&service.host, service.port),
     );
 
-    // max_tokensを指定せず、モデルのデフォルトまたは十分な長さを許可する
     let payload = json!({
         "model": model_name,
         "messages": [
@@ -31,11 +30,10 @@ pub fn query_inference(
         "stream": false,
     });
 
-    let response = client
-        .post(&url)
-        .json(&payload)
-        .send()
-        .map_err(|e| AppError::process_error(service.name, format!("Connection failed: {e}")))?;
+    let response =
+        client.post(&url).json(&payload).send().map_err(|e| {
+            AppError::process_error(service.name, format!("Connection failed: {e}"))
+        })?;
 
     if !response.status().is_success() {
         return Err(AppError::process_error(
@@ -48,13 +46,9 @@ pub fn query_inference(
         AppError::process_error(service.name, format!("Failed to parse JSON response: {e}"))
     })?;
 
-    // OpenAI互換レスポンスから content を抽出
-    body["choices"][0]["message"]["content"]
-        .as_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| {
-            AppError::process_error(service.name, "Invalid response structure: missing content")
-        })
+    body["choices"][0]["message"]["content"].as_str().map(|s| s.to_string()).ok_or_else(|| {
+        AppError::process_error(service.name, "Invalid response structure: missing content")
+    })
 }
 
 /// Sends a lightweight inference request to the specified service to check if it is ready.
