@@ -164,6 +164,8 @@ fn wait_until_ready(service: &ManagedService, pid: i32, model_name: &str) -> Res
     let start = Instant::now();
     let timeout_secs = startup_timeout_secs();
     let timeout = Duration::from_secs(timeout_secs);
+    // Derive per-poll timeout from overall startup timeout, with a minimum of 2 seconds
+    let per_poll_timeout_secs = (timeout_secs / 10).max(2);
 
     println!("⏳ Waiting for {} to become ready (Timeout: {}s)...", service.name, timeout_secs);
 
@@ -176,7 +178,7 @@ fn wait_until_ready(service: &ManagedService, pid: i32, model_name: &str) -> Res
             ));
         }
 
-        match health::check_inference_readiness(service, model_name, 2) {
+        match health::check_inference_readiness(service, model_name, per_poll_timeout_secs) {
             Ok(_) => return Ok(()),
             Err(_) => {
                 thread::sleep(Duration::from_millis(POLLING_INTERVAL_MS));
